@@ -1,0 +1,9 @@
+pixel
+*.exe
+latest.txt
+#var
+.env
+
+.vscode
+.idea
+*.lock
