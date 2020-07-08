@@ -21,6 +21,7 @@ func (ofd *OneOfd) CheckReceipt(productName string, fd string, datePay time.Time
 			if fd == v.FD || fd == v.FP {
 				document.Link = v.Link
 				document.TotalSum = v.Price
+				document.KktRegId = v.KktRegId
 			}
 		}
 	}

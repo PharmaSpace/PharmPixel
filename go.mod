@@ -4,8 +4,8 @@ go 1.13
 
 require (
 	github.com/PharmaSpace/OfdYa v1.0.2
-	github.com/PharmaSpace/ofdru v0.0.0-20200312135513-0268acf60a12
-	github.com/PharmaSpace/oneofd v1.0.0
+	github.com/PharmaSpace/ofdru v1.0.0
+	github.com/PharmaSpace/oneofd v1.0.6
 	github.com/PharmaSpace/platformOfd v1.1.1
 	github.com/PharmaSpace/sbis v1.8.2
 	github.com/PharmaSpace/taxcom v1.0.9

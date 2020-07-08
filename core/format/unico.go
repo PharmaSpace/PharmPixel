@@ -17,6 +17,7 @@ import (
 	serviceLib "github.com/kardianos/service"
 	_ "github.com/mattn/go-adodb"
 	"github.com/patrickmn/go-cache"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -43,6 +44,7 @@ type UnicoProduct struct {
 	Series          string
 	Inventory       float64
 	EAN             string
+	CreatedAt       time.Time
 }
 
 type UnicoOrder struct {
@@ -105,7 +107,7 @@ func (u *unico) Parse() {
 		document, checkReceiptErr := u.checkReceipt(receipt.Name, receipt.InvoiceNumber, datePay, int(receipt.TotalPrice*100))
 		product, err := u.DataService.GeProduct(receipt.Name)
 		if err != nil {
-			u.Log.Errorf("Ошибка получения продукта: %s %v", receipt.Name, err.Error())
+			log.Printf("Ошибка получения продукта: %s %v", receipt.Name, err.Error())
 		}
 		pointName := strings.Split(receipt.PharmacyID, ",")
 		nfd, err := strconv.Atoi(receipt.InvoiceNumber)
@@ -116,7 +118,13 @@ func (u *unico) Parse() {
 		if checkReceiptErr == nil && document.Link != "" {
 			dateTime, err := time.Parse("02.01.2006", receipt.Date)
 			if err != nil {
-				u.Log.Errorf("Ошибка разбора даты: %s %v", receipt.Name, err.Error())
+				dateTime, err = time.Parse("02-01-06Т15:04:05+07:00", receipt.Date)
+				if err != nil {
+					dateTime, err = time.Parse("2006-01-02Т15:04:05+07:00", receipt.Date)
+					if err != nil {
+						u.Log.Errorf("Ошибка разбора даты: %s %v", receipt.Name, err.Error())
+					}
+				}
 			}
 			dateR := time.Date(dateTime.Year(), dateTime.Month(), dateTime.Day(), dateTime.Hour(), dateTime.Minute(), dateTime.Second(), 11, time.Local)
 			rc := store.Receipt{
@@ -156,6 +164,13 @@ func (u *unico) Parse() {
 				receiptsN = append(receiptsN, rc)
 			}
 		}
+
+	}
+	if len(receipts) > 0 {
+		u.MP.SendReceipt(receipts)
+	}
+	if len(receiptsN) > 0 {
+		u.MP.SendReceiptN(receiptsN)
 	}
 }
 
@@ -194,6 +209,10 @@ func (u *unico) getReceipt() (receipts []*UnicoOrder) {
 	defer conn.Close()
 
 	query := fmt.Sprintf("select PD.Podr AS 'ID АПТЕКИ', DIV.ShortName AS 'АПТЕКА', FORMAT( CONVERT(datetime, DC.Date - 36163), 'dd.MM.yyyy', 'ru-RU' ) AS 'ДАТА ПРОДАЖИ', DCI.FPDKKM AS 'НОМЕР ККМ', DC.CodCotter AS 'НОМЕР ЧЕКА', F.NameFactory AS 'ПРОИЗВОДИТЕЛЬ', C.ShortName AS 'ПОСТАВЩИК', C.INN AS 'ИНН ПОСТ.', DC.NameTMC AS 'НАИМЕНОВАНИЕ ТОВАРА', L.PriceSaleNaked AS 'ЦЕНА ПРОДАЖИ БЕЗ НДС', L.PriceSale AS 'ЦЕНА ПРОДАЖИ С НДС', L.SumNDSSale AS 'СУММА НДС НА ЕДИНИЦУ', L.SumSale AS 'ОБЩАЯ СУММА ПО ЧЕКУ', CAST(L.Quantity as decimal(12, 2)) AS 'КОЛ-ВО', '' AS 'НОМЕР ПАРТИИ', L.Serial AS 'СЕРИЙНЫЙ НОМЕР' from PDoc PD INNER JOIN ListDoc L on L.CodDoc = PD.Cod INNER JOIN DupCott DC on DC.CodListDocKredit = L.Cod AND DC.CodPodr = PD.Podr AND DC.IsStorno = 0 and DC.IsErrCot = 0 and DC.IsDelete = 0 LEFT JOIN DupCotInfo DCI on DCI.CodGuid = DC.DCIGuid AND DCI.Date = DC.Date AND DCI.NumCash = DC.NumCash INNER JOIN TMC T on T.Cod = DC.CodTMC INNER JOIN Factory F on F.Cod = T.CodFactory INNER JOIN Country CT on CT.Cod = F.CodCountry INNER JOIN v_Division DIV on DIV.Cod = PD.Podr LEFT JOIN ListDoc Lco on Lco.Cod = L.CodOrig LEFT JOIN PDoc PDco on PDco.Cod = Lco.CodDoc INNER JOIN Client C on C.Cod = PDco.Client WHERE PD.DNacl >= dbo.Fn_UNI_ConvertDateFromSQL('%s') AND PD.DNacl <= dbo.Fn_UNI_ConvertDateFromSQL('%s') AND PD.DebKred = 2 AND PD.IsCassa > 0  GROUP BY PD.Podr, DIV.ShortName, DC.Date, DCI.FPDKKM, DC.CodCotter, F.NameFactory, C.ShortName, C.INN, DC.NameTMC, L.PriceSaleNaked, L.PriceSale, L.SumNDSSale, L.SumSale, L.Quantity, L.Serial ORDER BY DC.NameTMC ASC", u.date.Format("02.01.2006"), u.date.Format("02.01.2006"))
+	if u.Config.UnicoOptions.SqlDriver == "2008" {
+		query = fmt.Sprintf("select PD.Podr AS 'ID АПТЕКИ', DIV.ShortName AS 'АПТЕКА', CONVERT(datetime, DC.Date - 36163) AS 'ДАТА ПРОДАЖИ', DCI.FPDKKM AS 'НОМЕР ККМ', DC.CodCotter AS 'НОМЕР ЧЕКА', F.NameFactory AS 'ПРОИЗВОДИТЕЛЬ', C.ShortName AS 'ПОСТАВЩИК', C.INN AS 'ИНН ПОСТ.', DC.NameTMC AS 'НАИМЕНОВАНИЕ ТОВАРА', L.PriceSaleNaked AS 'ЦЕНА ПРОДАЖИ БЕЗ НДС', L.PriceSale AS 'ЦЕНА ПРОДАЖИ С НДС', L.SumNDSSale AS 'СУММА НДС НА ЕДИНИЦУ', L.SumSale AS 'ОБЩАЯ СУММА ПО ЧЕКУ', CAST(L.Quantity as decimal(12, 2)) AS 'КОЛ-ВО', '' AS 'НОМЕР ПАРТИИ', L.Serial AS 'СЕРИЙНЫЙ НОМЕР' from PDoc PD INNER JOIN ListDoc L on L.CodDoc = PD.Cod INNER JOIN DupCott DC on DC.CodListDocKredit = L.Cod AND DC.CodPodr = PD.Podr AND DC.IsStorno = 0 and DC.IsErrCot = 0 and DC.IsDelete = 0 LEFT JOIN DupCotInfo DCI on DCI.CodGuid = DC.DCIGuid AND DCI.Date = DC.Date AND DCI.NumCash = DC.NumCash INNER JOIN TMC T on T.Cod = DC.CodTMC INNER JOIN Factory F on F.Cod = T.CodFactory INNER JOIN Country CT on CT.Cod = F.CodCountry INNER JOIN v_Division DIV on DIV.Cod = PD.Podr LEFT JOIN ListDoc Lco on Lco.Cod = L.CodOrig LEFT JOIN PDoc PDco on PDco.Cod = Lco.CodDoc INNER JOIN Client C on C.Cod = PDco.Client WHERE PD.DNacl >= dbo.Fn_UNI_ConvertDateFromSQL('%s') AND PD.DNacl <= dbo.Fn_UNI_ConvertDateFromSQL('%s') AND PD.DebKred = 2 AND PD.IsCassa > 0  GROUP BY PD.Podr, DIV.ShortName, DC.Date, DCI.FPDKKM, DC.CodCotter, F.NameFactory, C.ShortName, C.INN, DC.NameTMC, L.PriceSaleNaked, L.PriceSale, L.SumNDSSale, L.SumSale, L.Quantity, L.Serial ORDER BY DC.NameTMC ASC", u.date.Format("02.01.2006"), u.date.Format("02.01.2006"))
+	}
+
 	rows, err := conn.Query(query)
 	if err != nil {
 		u.Log.Errorf("Ошибка запроса в получении заказов %v", err)
@@ -228,10 +247,14 @@ func (u *unico) checkReceipt(productName string, fd string, datePay time.Time, t
 			}
 		case []oneofd.Receipt:
 			for _, v := range t {
+				fdInt, _ := strconv.Atoi(fd)
+				fd = fmt.Sprintf("%d", fdInt)
 				if fd == v.FD || fd == v.FP {
 					document.Link = v.Link
 					document.TotalSum = v.Price
 					document.Ofd = "1ofd"
+					document.FiscalDocumentNumber = fdInt
+					document.KktRegId = v.KktRegId
 				}
 			}
 		case []ofdru.Receipt:

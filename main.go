@@ -25,7 +25,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-var revision = "2.2.8"
+var revision = "2.3.5"
 var logger windowsService.Logger
 
 type program struct {
@@ -48,7 +48,8 @@ func (p *program) Start(s windowsService.Service) error {
 func (p *program) run() error {
 	logger.Infof("I'm running %v.", windowsService.Platform())
 	logger.Infof("Version: %s.", revision)
-	ticker := time.NewTicker(1 * time.Second)
+	logger.Infof("Format: %s.", config.Cfg.Format)
+	ticker := time.NewTicker(1 * time.Minute)
 	if config.Cfg.WatchingTime > 0 {
 		ticker = time.NewTicker(config.Cfg.WatchingTime * time.Minute)
 	}

@@ -10,6 +10,7 @@ import (
 var Cfg *Config
 
 type Config struct {
+	Debug              bool               `long:"debug" env:"DEBUG" default:"false" description:"Режим отладки"`
 	WatchingTime       time.Duration      `long:"watchingTime" env:"WATCHING_TIME" default:"10" description:"Как часто проверять папку в минутах"`
 	Store              StoreGroup         `group:"store" namespace:"store" env-namespace:"STORE"`
 	BackupLocation     string             `long:"backup" env:"BACKUP_PATH" default:"./var/backup" description:"backups location"`
@@ -99,6 +100,7 @@ func Load() {
 	watchingTime, _ := strconv.Atoi(os.Getenv("WATCHING_TIME"))
 
 	Cfg = &Config{
+		Debug:              false,
 		WatchingTime:       time.Duration(watchingTime),
 		Store:              storeGroup,
 		BackupLocation:     os.Getenv("BACKUP_LOCATION"),
@@ -108,5 +110,10 @@ func Load() {
 		OfdOptions:         ofdOptions,
 		UniFarmOptions:     uniFarm,
 		UnicoOptions:       unico,
+	}
+
+	debug := os.Getenv("DEBUG")
+	if debug == "true" {
+		Cfg.Debug = true
 	}
 }

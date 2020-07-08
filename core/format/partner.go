@@ -362,9 +362,14 @@ func (p *partner) checkReceipt(productName string, fd string, datePay time.Time,
 			}
 		case []oneofd.Receipt:
 			for _, v := range t {
+				fdInt, _ := strconv.Atoi(fd)
+				fd = fmt.Sprintf("%d", fdInt)
 				if fd == v.FD || fd == v.FP {
 					document.Link = v.Link
 					document.TotalSum = v.Price
+					document.Ofd = "1ofd"
+					document.FiscalDocumentNumber = fdInt
+					document.KktRegId = v.KktRegId
 				}
 			}
 		case []ofdru.Receipt:

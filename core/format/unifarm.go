@@ -14,6 +14,7 @@ import (
 )
 
 type uniFarm struct {
+	date        time.Time
 	Config      *config.Config
 	DataService *service.DataStore
 	MP          *service.Marketpalce
@@ -21,18 +22,13 @@ type uniFarm struct {
 	cache       *cache.Cache
 }
 
-func UniFarm(c *config.Config, dataService *service.DataStore, mp *service.Marketpalce, ca *cache.Cache, log serviceLib.Logger) *uniFarm {
-	return &uniFarm{Config: c, DataService: dataService, MP: mp, Log: log, cache: ca}
+func UniFarm(c *config.Config, dataService *service.DataStore, mp *service.Marketpalce, ca *cache.Cache, log serviceLib.Logger, date time.Time) *uniFarm {
+	return &uniFarm{Config: c, DataService: dataService, MP: mp, Log: log, cache: ca, date: date}
 }
 
 func (u *uniFarm) Parse() {
 	uni := service.UniFarm(u.Config.UniFarmOptions.Username, u.Config.UniFarmOptions.Password)
-	date := time.Now()
-	if u.Config.UniFarmOptions.Date != "" {
-		dt, _ := time.Parse("02.01.2006", u.Config.UniFarmOptions.Date)
-		date = time.Date(dt.Year(), dt.Month(), dt.Day(), 23, 59, 59, 0, dt.Location())
-	}
-	productsRow := uni.GetProduct(date)
+	productsRow := uni.GetProduct(u.date)
 	products := []service.Product{}
 	receiptsN := []store.ReceiptN{}
 	receipts := []store.Receipt{}
@@ -51,7 +47,7 @@ func (u *uniFarm) Parse() {
 	u.getMachProduct()
 	//time.Sleep(10 * time.Minute)
 
-	receiptsRow := uni.GetReceipt(date)
+	receiptsRow := uni.GetReceipt(u.date)
 	for _, receipt := range receiptsRow {
 		datePay, _ := time.Parse("2006-01-02T15:04:05", receipt.Date)
 
@@ -94,7 +90,7 @@ func (u *uniFarm) Parse() {
 				CreatedAt:            time.Now().Format(time.RFC3339Nano),
 				UpdatedAt:            time.Now().Format(time.RFC3339Nano),
 				PointName:            pointName[0],
-				SupplerName:          receipt.ProviderName,
+				SupplerName:          receipt.InnProvider,
 				TotalSum:             document.TotalSum,
 			}
 			if product.ID != "" && product.Export {

@@ -156,13 +156,13 @@ func (s *SQLiteDB) Get(req GetRequest) (file store.File, err error) {
 }
 
 func (s *SQLiteDB) GetProduct(req GetRequest) (product store.Product, err error) {
-	stmt, err := s.db.Prepare("select id, name, export from products where name=?")
+	stmt, err := s.db.Prepare("select pharmspaceid, name, manufacture, export from products_new where name=?")
 	if err != nil {
 		return product, err
 	}
 	defer stmt.Close()
 	p := store.Product{}
-	err = stmt.QueryRow(req.Name).Scan(&p.ID, &p.Name, &p.Export)
+	err = stmt.QueryRow(req.Name).Scan(&p.ID, &p.Name, &p.Manufacture, &p.Export)
 	if err != nil {
 		return product, err
 	}

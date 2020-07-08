@@ -7,6 +7,7 @@ import (
 	"Pixel/store/service"
 	"archive/zip"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"github.com/PharmaSpace/OfdYa"
 	"github.com/PharmaSpace/ofdru"
@@ -123,6 +124,12 @@ func (p *pixel) sendOrders(orders []PixelOrder) {
 
 	for _, order := range orders {
 		datePay, err := time.Parse("02.01.2006 15:04:05", order.Date)
+		if err != nil {
+			datePay, err = time.Parse("02.01.2006 15:04", order.Date)
+			if err != nil {
+				p.Log.Errorf("[pixel]ошибка преобразования даты %s | %+v", order.Date, err)
+			}
+		}
 		receipt, checkReceiptErr := p.checkReceipt(order.Name, order.InvoiceNumber, datePay, order.TotalPrice)
 		if err == nil && receipt.Link == "" {
 			continue
@@ -131,10 +138,14 @@ func (p *pixel) sendOrders(orders []PixelOrder) {
 		if err != nil {
 			p.Log.Errorf("sendOrders->GeProduct: %s %v", order.Name, err.Error())
 		}
-		dateTime, _ := time.Parse("02.01.2006 15:04:05", order.Date)
+
 		if checkReceiptErr == nil {
+			quantity, err := strconv.Atoi(receipt.ProductQuantity.String())
+			if err != nil {
+				quantity = 1
+			}
 			rc := store.Receipt{
-				DateTime:             dateTime.Local().Format(time.RFC3339Nano), //2020-02-05T10:11:08
+				DateTime:             datePay.Local().Format(time.RFC3339Nano), //2020-02-05T10:11:08
 				FiscalDocumentNumber: receipt.FiscalDocumentNumber,
 				KktRegId:             receipt.KktRegId,
 				Link:                 receipt.Link,
@@ -142,8 +153,9 @@ func (p *pixel) sendOrders(orders []PixelOrder) {
 				Ofd:                  receipt.Ofd,
 				Price:                receipt.ProductPrice,
 				ProductId:            product.ID,
-				Quantity:             order.TotalNumber,
+				Quantity:             receipt.ProductQuantity.String(),
 				TotalSum:             receipt.TotalSum,
+				Total:                receipt.ProductPrice * quantity,
 				SupplerName:          order.SupplierINN,
 				PointName:            order.PharmacyID,
 				Series:               order.Series,
@@ -227,10 +239,10 @@ func (p *pixel) parsingOrderFile(file string) (orders []PixelOrder) {
 			Supplier:        record[6],
 			SupplierINN:     record[7],
 			Name:            record[8],
-			PriceWoVat:      int(priceWoVat * 100),
-			PriceWVat:       int(priceWVat * 100),
-			Vat:             int(vat * 100),
-			TotalPrice:      int(totalPrice * 100),
+			PriceWoVat:      int(priceWoVat),
+			PriceWVat:       int(priceWVat),
+			Vat:             int(vat),
+			TotalPrice:      int(totalPrice),
 			TotalNumber:     record[13],
 			ShipmentNumber:  record[14],
 			Series:          record[15],
@@ -241,6 +253,7 @@ func (p *pixel) parsingOrderFile(file string) (orders []PixelOrder) {
 }
 
 func (p *pixel) parsingProductFile(file string) (products []PixelProduct) {
+
 	records, _ := p.convertCsvToStruct(file, 7)
 	for i, record := range records {
 		if i == 0 {
@@ -346,6 +359,17 @@ func (p *pixel) unzip(fileName string, targetDir string) {
 func (p *pixel) checkReceipt(productName string, fd string, datePay time.Time, totalPrice int) (document model.Document, err error) {
 	productName = p.cut(strings.ToLower(productName), 32)
 	if receipts, ok := p.cache.Get(productName); ok {
+		if config.Cfg.Debug {
+			f, err := os.OpenFile("receipt.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			if err != nil {
+				log.Println(err)
+			}
+			defer f.Close()
+			j, _ := json.Marshal(receipts)
+			if _, err := f.WriteString(string(j)); err != nil {
+				log.Println(err)
+			}
+		}
 		switch t := receipts.(type) {
 		case []platformOfd.Receipt:
 			for _, v := range t {
@@ -357,18 +381,38 @@ func (p *pixel) checkReceipt(productName string, fd string, datePay time.Time, t
 			}
 		case []oneofd.Receipt:
 			for _, v := range t {
+				fdInt, _ := strconv.Atoi(fd)
+				fd = fmt.Sprintf("%d", fdInt)
 				if fd == v.FD || fd == v.FP {
 					document.Link = v.Link
 					document.TotalSum = v.Price
 					document.Ofd = "1ofd"
+					document.FiscalDocumentNumber = fdInt
+					document.KktRegId = v.KktRegId
+					for _, i := range v.Products {
+						if p.cut(strings.ToLower(i.Name), 32) == productName {
+							document.ProductPrice = i.Price
+							document.ProductQuantity = json.Number(fmt.Sprintf("%d", i.Quantity))
+						}
+					}
 				}
 			}
 		case []ofdru.Receipt:
 			for _, v := range t {
+				fdInt, _ := strconv.Atoi(fd)
+				fd = fmt.Sprintf("%d", fdInt)
 				if fd == v.FD || fd == v.FP {
 					document.Link = v.Link
 					document.TotalSum = v.Price
 					document.Ofd = "ofdru"
+					document.FiscalDocumentNumber = fdInt
+					document.KktRegId = v.KktRegId
+					for _, i := range v.Products {
+						if p.cut(strings.ToLower(i.Name), 32) == productName {
+							document.ProductPrice = i.Price
+							document.ProductQuantity = json.Number(fmt.Sprintf("%d", i.Quantity))
+						}
+					}
 				}
 			}
 		case []OfdYa.Receipt:
@@ -381,9 +425,9 @@ func (p *pixel) checkReceipt(productName string, fd string, datePay time.Time, t
 			}
 		case []*sbis.Receipt:
 			for _, v := range t {
-				if fd == strconv.Itoa(v.RequestNumber) || totalPrice == v.TotalSum {
+				if fd == strconv.Itoa(v.RequestNumber) || fd == strconv.Itoa(v.FiscalDocumentNumber) || totalPrice == v.TotalSum {
 					for _, i := range v.Items {
-						if i.Name == strings.ToUpper(productName) {
+						if p.cut(strings.ToLower(i.Name), 32) == productName {
 							date, _ := time.Parse("2006-01-02T15:04:05", v.ReceiveDateTime)
 							document.DateTime = date.Unix()
 							document.Link = v.Url
@@ -405,6 +449,14 @@ func (p *pixel) checkReceipt(productName string, fd string, datePay time.Time, t
 					document.TotalSum = v.Price
 					document.FiscalDocumentNumber = fiscalDocumentNumber
 					document.Ofd = "taxcom"
+					for _, i := range v.Products {
+						if p.cut(strings.ToLower(i.Name), 32) == productName {
+							document.ProductQuantity = json.Number(fmt.Sprintf("%d", i.Quantity))
+							document.ProductPrice = i.Price
+							document.ProductName = i.Name
+							document.ProductTotalPrice = i.TotalPrice
+						}
+					}
 				}
 			}
 		default:
