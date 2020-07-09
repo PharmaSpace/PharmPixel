@@ -4,6 +4,7 @@ import (
 	"Pixel/core/model"
 	"github.com/PharmaSpace/platformOfd"
 	"github.com/patrickmn/go-cache"
+	"log"
 	"strings"
 	"time"
 )
@@ -40,6 +41,7 @@ func (ofd *PlatformOfd) GetReceipts(date time.Time) {
 	for k, v := range rCache {
 		ofd.Cache.Set(k, v, 12*time.Hour)
 	}
+	log.Printf("Получено чеков: %d", len(rCache))
 }
 
 func (ofd *PlatformOfd) GetName() string {

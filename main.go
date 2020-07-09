@@ -49,7 +49,7 @@ func (p *program) run() error {
 	logger.Infof("I'm running %v.", windowsService.Platform())
 	logger.Infof("Version: %s.", revision)
 	logger.Infof("Format: %s.", config.Cfg.Format)
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(10 * time.Second)
 	if config.Cfg.WatchingTime > 0 {
 		ticker = time.NewTicker(config.Cfg.WatchingTime * time.Minute)
 	}

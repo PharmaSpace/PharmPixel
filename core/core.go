@@ -57,6 +57,7 @@ func (c *Core) parse(date time.Time, cReceipt *cache.Cache) {
 		pr := provider.GetProvider(cReceipt, ofd.Type, ofd.AccessToken)
 		pr.GetReceipts(date)
 	}
+	log.Printf("Всего получено чеков %d\n", cReceipt.ItemCount())
 	switch c.Config.Format {
 	case "unifarm":
 		uf := format.UniFarm(c.Config, c.DataService, c.Marketplace, cReceipt, c.Log, date)

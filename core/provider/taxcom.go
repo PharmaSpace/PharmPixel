@@ -4,6 +4,7 @@ import (
 	"Pixel/core/model"
 	"github.com/PharmaSpace/taxcom"
 	"github.com/patrickmn/go-cache"
+	"log"
 	"strings"
 	"time"
 )
@@ -39,9 +40,18 @@ func (ofd *TaxCom) GetReceipts(date time.Time) {
 				rCache[name] = append(rCache[name], v)
 			}
 		}
+
+		for k, _ := range rCache {
+			if item, ok := ofd.Cache.Get(k); ok {
+				receipts := item.([]taxcom.Receipt)
+				rCache[k] = append(rCache[k], receipts...)
+			}
+		}
+
 		for k, v := range rCache {
 			ofd.Cache.Set(k, v, 12*time.Hour)
 		}
+		log.Printf("Получено чеков: %d по аккаунту %s", len(rCache), account)
 	}
 }
 

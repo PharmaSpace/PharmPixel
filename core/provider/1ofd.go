@@ -4,6 +4,7 @@ import (
 	"Pixel/core/model"
 	"github.com/PharmaSpace/oneofd"
 	"github.com/patrickmn/go-cache"
+	"log"
 	"strings"
 	"time"
 )
@@ -37,9 +38,18 @@ func (ofd *OneOfd) GetReceipts(date time.Time) {
 			rCache[name] = append(rCache[name], v)
 		}
 	}
+
+	for k, _ := range rCache {
+		if item, ok := ofd.Cache.Get(k); ok {
+			receipts := item.([]oneofd.Receipt)
+			rCache[k] = append(rCache[k], receipts...)
+		}
+	}
+
 	for k, v := range rCache {
 		ofd.Cache.Set(k, v, 12*time.Hour)
 	}
+	log.Printf("Получено чеков: %d", len(rCache))
 }
 
 func (ofd *OneOfd) GetName() string {
