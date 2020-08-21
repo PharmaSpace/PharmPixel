@@ -2,6 +2,7 @@ package provider
 
 import (
 	"Pixel/core/model"
+	"Pixel/helper"
 	"github.com/PharmaSpace/sbis"
 	"github.com/patrickmn/go-cache"
 	"log"
@@ -48,18 +49,24 @@ func (ofd *Sbis) GetReceipts(date time.Time) {
 		Password:    ofd.Password,
 	}))
 
-	rCache := make(map[string][]*sbis.Receipt)
+	rCache := make(map[string][]model.Document)
 	for _, v := range receipts {
-		for _, pr := range v.Items {
-			name := cut(strings.ToLower(strings.Trim(pr.Name, "\t \n")), 32)
-			rCache[name] = append(rCache[name], v)
+		for i, pr := range v.Items {
+			name := helper.Cut(pr.Name, 32)
+			document := sbisReceiptToDocument(v, i)
+			rCache[name] = append(rCache[name], document)
 		}
 	}
 
 	for k, _ := range rCache {
 		if item, ok := ofd.Cache.Get(k); ok {
 			receipts := item.([]*sbis.Receipt)
-			rCache[k] = append(rCache[k], receipts...)
+			for _, receipt := range receipts {
+				for i, _ := range receipt.Items {
+					rCache[k] = append(rCache[k], sbisReceiptToDocument(receipt, i))
+				}
+			}
+
 		}
 	}
 
@@ -71,4 +78,23 @@ func (ofd *Sbis) GetReceipts(date time.Time) {
 
 func (ofd *Sbis) GetName() string {
 	return ofd.Type
+}
+
+func sbisReceiptToDocument (receipt *sbis.Receipt, itemNum int) model.Document {
+	document := model.Document{
+		DateTime:              int64(receipt.DateTime),
+		FiscalDocumentNumber:  receipt.FiscalDocumentNumber,
+		KktRegId:              receipt.KktRegID,
+		Nds20:                 receipt.NdsNo,
+		TotalSum:              receipt.TotalSum,
+		ProductName:           receipt.Items[itemNum].Name,
+		ProductQuantity:       int(receipt.Items[itemNum].Quantity),
+		ProductPrice:          receipt.Items[itemNum].Price,
+		ProductTotalPrice:     receipt.TotalSum,
+		Link:                  receipt.Url,
+		Ofd:                   "sbis",
+		FiscalDocumentNumber2: receipt.FiscalDriveNumber,
+		FiscalDocumentNumber3: strconv.FormatInt(receipt.FiscalSign, 10),
+	}
+	return document
 }

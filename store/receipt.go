@@ -15,8 +15,10 @@ type Receipt struct {
 	Total                int    `json:"total" db:"total"`
 	TotalSum             int    `json:"totalSum" db:"totalSum"`
 	SupplerName          string `json:"supplerName"`
+	SupplerInn           string `json:"supplerInn"`
 	PointName            string `json:"pointName"`
 	Series               string `json:"series"`
+	IsValidated          bool   `json:"isValidated"`
 	CreatedAt            string `json:"createdAt" db:"createdAt" `
 	UpdatedAt            string `json:"updatedAt" db:"updatedAt"`
 }

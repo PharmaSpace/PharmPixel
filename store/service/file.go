@@ -8,6 +8,18 @@ import (
 	"time"
 )
 
+type DataStoreInterface interface {
+	Create(file store.File) (fileName store.File, err error)
+	CreateProduct(product store.Product) (pr store.Product, err error)
+	Get(fileName string) (store.File, error)
+	GetProduct(name string) (store.Product, error)
+	CreateReceipt(receipt store.Receipt) (store.Receipt, error)
+	CreateReceiptN(receipt store.ReceiptN) (store.ReceiptN, error)
+	GetAllReceipts() ([]store.Receipt, error)
+	DeleteReceipt(receipt store.Receipt) error
+	Close() error
+}
+
 // DataStore wraps store.Interface with additional methods
 type DataStore struct {
 	Engine engine.Interface
@@ -39,8 +51,8 @@ func (s *DataStore) Get(fileName string) (store.File, error) {
 	return c, nil
 }
 
-// GeProduct file by Name
-func (s *DataStore) GeProduct(name string) (store.Product, error) {
+// GetProduct file by Name
+func (s *DataStore) GetProduct(name string) (store.Product, error) {
 	c, err := s.Engine.GetProduct(engine.GetRequest{Name: name})
 	if err != nil {
 		return store.Product{}, err

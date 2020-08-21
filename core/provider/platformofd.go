@@ -2,10 +2,10 @@ package provider
 
 import (
 	"Pixel/core/model"
+	"Pixel/helper"
 	"github.com/PharmaSpace/platformOfd"
 	"github.com/patrickmn/go-cache"
-	"log"
-	"strings"
+	"strconv"
 	"time"
 )
 
@@ -31,19 +31,42 @@ func (ofd *PlatformOfd) GetReceipts(date time.Time) {
 	pOfd := platformOfd.PlatformOfd(ofd.Login, ofd.Password)
 	receipts, _ := pOfd.GetReceipts(date)
 
-	rCache := make(map[string][]platformOfd.Receipt)
-	for _, v := range receipts {
-		for _, pr := range v.Products {
-			name := cut(strings.ToLower(strings.Trim(pr.Name, "\t \n")), 32)
-			rCache[name] = append(rCache[name], v)
+	rCache := make(map[string][]model.Document)
+	for _, receipt := range receipts {
+		for _, product := range receipt.Products {
+			document := convertPlatformOfdToDocument(receipt, product)
+			name := helper.Cut(document.ProductName, 32)
+			rCache[name] = append(rCache[name], document)
 		}
 	}
+
 	for k, v := range rCache {
 		ofd.Cache.Set(k, v, 12*time.Hour)
 	}
-	log.Printf("Получено чеков: %d", len(rCache))
 }
 
 func (ofd *PlatformOfd) GetName() string {
 	return ofd.Type
+}
+
+func convertPlatformOfdToDocument(receipt platformOfd.Receipt, product platformOfd.Product) model.Document {
+	date, _ := strconv.ParseInt(receipt.Date, 10, 64)
+	date = date / 1000
+	fd, _ := strconv.ParseInt(receipt.FD, 10, 32)
+	tp, _ := strconv.ParseInt(product.TotalPrice, 10, 32)
+	return model.Document{
+		DateTime:              date,
+		FiscalDocumentNumber:  int(fd),
+		KktRegId:              "",
+		Nds20:                 product.Vat,
+		TotalSum:              receipt.Price,
+		ProductName:           product.Name,
+		ProductQuantity:       product.Quantity,
+		ProductPrice:          product.Price,
+		ProductTotalPrice:     int(tp),
+		Link:                  receipt.Link,
+		Ofd:                   "platformOfd",
+		FiscalDocumentNumber2: receipt.FP,
+		FiscalDocumentNumber3: "",
+	}
 }

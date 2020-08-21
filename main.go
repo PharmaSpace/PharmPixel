@@ -8,11 +8,8 @@ package main
 import (
 	"Pixel/config"
 	"Pixel/core"
-	"Pixel/store/engine"
 	"Pixel/store/service"
 	"flag"
-	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"runtime"
@@ -25,7 +22,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-var revision = "2.3.5"
+var revision = "3.0.6"
 var logger windowsService.Logger
 
 type program struct {
@@ -48,8 +45,7 @@ func (p *program) Start(s windowsService.Service) error {
 func (p *program) run() error {
 	logger.Infof("I'm running %v.", windowsService.Platform())
 	logger.Infof("Version: %s.", revision)
-	logger.Infof("Format: %s.", config.Cfg.Format)
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(1 * time.Second)
 	if config.Cfg.WatchingTime > 0 {
 		ticker = time.NewTicker(config.Cfg.WatchingTime * time.Minute)
 	}
@@ -58,6 +54,26 @@ func (p *program) run() error {
 		select {
 		case <-ticker.C:
 			lock := fslock.New(config.Cfg.Files.WorkingFolder + "/../pixel.lock")
+			if config.Cfg.MarketplaceOptions.Username == "s.antsupov+pil@pharmecosystem.ru" ||
+				config.Cfg.MarketplaceOptions.Username == "apt4@pharmaspace.ru" ||
+				config.Cfg.MarketplaceOptions.Username == "apt3@pharmaspace.ru" ||
+				config.Cfg.MarketplaceOptions.Username == "apt2@pharmaspace.ru" ||
+				config.Cfg.MarketplaceOptions.Username == "apt@pharmaspace.ru" ||
+				config.Cfg.MarketplaceOptions.Username == "887530+at5@mail.ru" ||
+				config.Cfg.MarketplaceOptions.Username == "887530+at4@mail.ru" ||
+				config.Cfg.MarketplaceOptions.Username == "887530+at3@mail.ru" ||
+				config.Cfg.MarketplaceOptions.Username == "887530+at2@mail.ru" ||
+				config.Cfg.MarketplaceOptions.Username == "887530+at1@mail.ru" ||
+				config.Cfg.MarketplaceOptions.Username == "887530@mail.ru" {
+				_, err := os.Stat(config.Cfg.Files.WorkingFolder + "/../updated.lock")
+				if os.IsNotExist(err) {
+					config.Cfg.UniFarmOptions.Date = "01.08.2020"
+					os.Create(config.Cfg.Files.WorkingFolder + "/../updated.lock")
+				} else {
+					config.Cfg.UniFarmOptions.Date = time.Now().Format("01.08.2020")
+				}
+			}
+
 			lock.Lock()
 			lock.Unlock()
 			marketplace := &service.Marketpalce{
@@ -87,9 +103,6 @@ func (p *program) run() error {
 }
 
 func (p *program) Stop(s windowsService.Service) error {
-	if e := p.dataService.Close(); e != nil {
-		logger.Warning("[WARN] failed to close data store, %s", e)
-	}
 	logger.Info("I'm Stopping!")
 	close(p.exit)
 	os.Remove(config.Cfg.Files.WorkingFolder + "/../pixel.lock")
@@ -111,17 +124,8 @@ func main() {
 			"After=network-online.target syslog.target"},
 		Option: options,
 	}
-	storeEngine, err := makeDataStore()
-	if err != nil {
-		logger.Error("failed to make data store engine")
-	}
 
-	dataService := &service.DataStore{
-		Engine: storeEngine,
-	}
-	prg := &program{
-		dataService: dataService,
-	}
+	prg := &program{}
 	s, err := windowsService.New(prg, svcConfig)
 	if err != nil {
 		logger.Error(err)
@@ -166,7 +170,9 @@ func getDump() string {
 }
 
 func init() {
-	_ = godotenv.Load(".env")
+	envFlag := flag.String("env", ".env", "env file path")
+	flag.Parse()
+	_ = godotenv.Load(*envFlag)
 	config.Load()
 
 	sigChan := make(chan os.Signal)
@@ -176,16 +182,6 @@ func init() {
 		}
 	}()
 	signal.Notify(sigChan, syscall.SIGQUIT)
-}
-
-func makeDataStore() (result engine.Interface, err error) {
-	log.Printf("[INFO] make data store, type=sqllite")
-
-	if err = makeDirs(config.Cfg.Store.Path); err != nil {
-		return nil, errors.Wrap(err, "failed to create sqllite store")
-	}
-	result, err = engine.NewSQLiteDB(fmt.Sprintf("%s/pixel.sqlite", config.Cfg.Store.Path))
-	return result, errors.Wrap(err, "can't initialize data store")
 }
 
 // mkdir -p for all dirs

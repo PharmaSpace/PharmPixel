@@ -3,11 +3,15 @@ package core
 import (
 	"Pixel/config"
 	"Pixel/core/format"
+	"Pixel/core/model"
 	"Pixel/core/provider"
 	"Pixel/store/service"
+	"encoding/gob"
+	"fmt"
 	serviceLib "github.com/kardianos/service"
 	"github.com/patrickmn/go-cache"
 	"log"
+	"strconv"
 	"time"
 )
 
@@ -43,7 +47,7 @@ func (c *Core) Exec() {
 func (c *Core) iterationByDay(t time.Time, cReceipt *cache.Cache) bool {
 	for d := t; d.Month() == t.Month(); d = d.AddDate(0, 0, 1) {
 		if d.Month() >= time.Now().Month() && d.Day() > time.Now().Day() {
-			return false
+			return true
 		}
 		log.Printf("Обрабока файлов за %s", d.Format(time.RFC3339))
 		c.parse(d, cReceipt)
@@ -53,23 +57,50 @@ func (c *Core) iterationByDay(t time.Time, cReceipt *cache.Cache) bool {
 
 func (c *Core) parse(date time.Time, cReceipt *cache.Cache) {
 	for _, ofd := range c.Config.OfdOptions {
-		log.Printf("Получение данных из ОФД %s", ofd.Type)
-		pr := provider.GetProvider(cReceipt, ofd.Type, ofd.AccessToken)
-		pr.GetReceipts(date)
+		isLocal, _ := strconv.ParseBool(ofd.IsLocal)
+		if isLocal {
+			log.Printf("Загрузка локальных данных ОФД %s за %s", ofd.Type, date.Format("01-02-2006"))
+			gob.Register([]model.Document{})
+			err := cReceipt.LoadFile(fmt.Sprintf("var/ofd/%s_%s", ofd.Type, date.Format("01-02-2006")))
+			if err != nil {
+				log.Printf("Не удалось найти локальные данные для ОФД %s за %s: %s", ofd.Type, date.Format("01-02-2006"), err)
+				log.Printf("Получение данных из ОФД %s", ofd.Type)
+				pr := provider.GetProvider(cReceipt, ofd.Type, ofd.AccessToken)
+				pr.GetReceipts(date)
+				err := cReceipt.SaveFile(fmt.Sprintf("var/ofd/%s_%s", ofd.Type, date.Format("01-02-2006")))
+				if err != nil {
+					log.Printf("Не удалось сохранить данные для ОФД %s за %s: %s", ofd.Type, date.Format("01-02-2006"), err)
+				}
+				log.Printf("Локальные данные для ОФД %s за %s сохранены", ofd.Type, date.Format("01-02-2006"))
+				if err != nil {
+					isLocal = false
+				}
+			}
+		}
+		if !isLocal {
+			log.Printf("Получение данных из ОФД %s", ofd.Type)
+			pr := provider.GetProvider(cReceipt, ofd.Type, ofd.AccessToken)
+			pr.GetReceipts(date)
+		}
 	}
-	log.Printf("Всего получено чеков %d\n", cReceipt.ItemCount())
 	switch c.Config.Format {
 	case "unifarm":
 		uf := format.UniFarm(c.Config, c.DataService, c.Marketplace, cReceipt, c.Log, date)
 		uf.Parse()
 	case "pixel":
-		pixel := format.Pixel(c.Config, c.DataService, c.Marketplace, cReceipt, c.Log)
+		pixel := format.Pixel(c.Config, c.Marketplace, cReceipt, c.Log, date)
 		pixel.Parse()
-	case "partner":
-		partner := format.Partner(c.Config, c.DataService, c.Marketplace, cReceipt, c.Log)
-		partner.Parse()
+	/*case "partner":
+	partner := format.Partner(c.Config, c.DataService, c.Marketplace, cReceipt, c.Log)
+	partner.Parse()*/
 	case "unico":
-		unico := format.Unico(c.Config, c.DataService, c.Marketplace, cReceipt, c.Log, date)
+		db, err := format.ConnectToErpDB(c.Config)
+		if err != nil {
+			c.Log.Errorf("Ошибка подключения к базе данных ERP %s", err)
+			break
+		}
+		defer db.Close()
+		unico := format.Unico(c.Config, c.Marketplace, db, cReceipt, c.Log, date)
 		unico.Parse()
 	default:
 		c.Log.Errorf("Формат интеграции не поддерживается %s", c.Config.Format)

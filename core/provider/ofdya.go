@@ -2,10 +2,10 @@ package provider
 
 import (
 	"Pixel/core/model"
+	"Pixel/helper"
 	"github.com/PharmaSpace/OfdYa"
 	"github.com/patrickmn/go-cache"
 	"log"
-	"strings"
 	"time"
 )
 
@@ -34,7 +34,7 @@ func (ofd *Ofdya) GetReceipts(date time.Time) {
 	rCache := make(map[string][]OfdYa.Receipt)
 	for _, v := range receipts {
 		for _, pr := range v.Products {
-			name := cut(strings.ToLower(strings.Trim(pr.Name, "\t \n")), 32)
+			name := helper.Cut(pr.Name, 32)
 			rCache[name] = append(rCache[name], v)
 		}
 	}

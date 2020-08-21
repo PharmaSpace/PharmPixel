@@ -2,10 +2,12 @@ package provider
 
 import (
 	"Pixel/core/model"
+	"Pixel/helper"
+	"fmt"
 	"github.com/PharmaSpace/taxcom"
 	"github.com/patrickmn/go-cache"
-	"log"
-	"strings"
+	"math"
+	"strconv"
 	"time"
 )
 
@@ -33,26 +35,52 @@ func (ofd *TaxCom) GetReceipts(date time.Time) {
 	accountList := taxcom.Taxcom(ofd.Login, ofd.Password, ofd.IdIntegrator, "").GetAccountList()
 	for _, account := range accountList {
 		receipts, _ := taxcom.Taxcom(ofd.Login, ofd.Password, ofd.IdIntegrator, account).GetReceipts(date)
-		rCache := make(map[string][]taxcom.Receipt)
+		rCache := make(map[string][]model.Document)
 		for _, v := range receipts {
 			for _, pr := range v.Products {
-				name := cut(strings.ToLower(strings.Trim(pr.Name, "\t \n")), 32)
-				rCache[name] = append(rCache[name], v)
+				document := ofd.buildDocument(v, pr)
+				name := helper.Cut(pr.Name, 32)
+				rCache[name] = append(rCache[name], document)
 			}
 		}
-
-		for k, _ := range rCache {
-			if item, ok := ofd.Cache.Get(k); ok {
-				receipts := item.([]taxcom.Receipt)
-				rCache[k] = append(rCache[k], receipts...)
-			}
-		}
-
 		for k, v := range rCache {
 			ofd.Cache.Set(k, v, 12*time.Hour)
 		}
-		log.Printf("Получено чеков: %d по аккаунту %s", len(rCache), account)
 	}
+
+}
+
+func (ofd *TaxCom) buildDocument(receipt taxcom.Receipt, product taxcom.Product) model.Document {
+	document := model.Document{}
+
+	date, _ := time.Parse("2006-01-02T15:04:05Z", receipt.Date)
+
+	document.DateTime = date.Unix()
+
+	document.Ofd = "taxcom"
+
+	fiscalDocumentNumber, _ := strconv.Atoi(receipt.FD)
+	document.KktRegId = receipt.KktRegId
+	document.Link = receipt.Link
+	document.TotalSum = receipt.Price
+	document.FiscalDocumentNumber = fiscalDocumentNumber
+	document.FiscalDocumentNumber2 = receipt.FP
+	document.FiscalDocumentNumber3 = fmt.Sprint(receipt.DocumentNumber)
+
+	productPrice := product.Price
+	if product.TotalPrice < productPrice {
+		productPrice = product.TotalPrice
+	}
+
+	document.ProductPrice = productPrice
+	document.ProductTotalPrice = product.TotalPrice
+	document.ProductQuantity = product.Quantity
+	if document.ProductQuantity == 0 {
+		document.ProductQuantity = int(math.Ceil(float64(product.TotalPrice / product.Price)))
+	}
+	document.ProductName = product.Name
+
+	return document
 }
 
 func (ofd *TaxCom) GetName() string {

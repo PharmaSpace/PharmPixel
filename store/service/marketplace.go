@@ -9,6 +9,14 @@ import (
 	"log"
 )
 
+type MarketPlaceInterface interface {
+	SendProduct(products []Product)
+	SendOfdProducts(products []Product, isOfd bool, isErp bool)
+	SendReceipt(receipts []store.Receipt)
+	SendReceiptN(receipts []store.ReceiptN)
+	GetMatchProducts(filterDate string, isOfd bool, isErp bool) MatchProducts
+}
+
 type Marketpalce struct {
 	Revision string
 	Log      serviceLib.Logger
@@ -29,6 +37,12 @@ type DataReceiptsN struct {
 	Data []store.ReceiptN `json:"data"`
 }
 
+type OfdProductsRequest struct {
+	Data  []Product `json:"data"`
+	IsOfd bool      `json:"isOfd"`
+	IsErp bool      `json:"isErp"`
+}
+
 type Product struct {
 	Name          string  `json:"name"`
 	Manufacturer  string  `json:"manufacturer"`
@@ -38,15 +52,21 @@ type Product struct {
 	Stock         float64 `json:"stock"`
 	WarehouseName string  `json:"warehouseName"`
 	SupplerName   string  `json:"supplerName"`
+	SupplerInn    string  `json:"supplerInn"`
+	CreatedAt     string  `json:"createdAt"`
+}
+
+type MatchProductItem struct {
+	Export       bool    `json:"export"`
+	ID           string  `json:"id"`
+	Name         string  `json:"name"`
+	Stock        float64 `json:"stock"`
+	SupplierName string  `json:"supplierName"`
+	SupplierInn  string  `json:"supplierInn"`
 }
 
 type MatchProducts struct {
-	Data []struct {
-		Export       bool   `json:"export"`
-		ID           string `json:"id"`
-		Manufacturer string `json:"manufacturer"`
-		Name         string `json:"name"`
-	} `json:"data"`
+	Data []MatchProductItem `json:"data"`
 }
 
 type AuthSuccess struct {
@@ -108,6 +128,33 @@ func (m *Marketpalce) SendProduct(products []Product) {
 	}
 }
 
+func (m *Marketpalce) SendOfdProducts(products []Product, isOfd bool, isErp bool) {
+	m.auth()
+	if isErp {
+		log.Printf("SendErpProduct count: %d", len(products))
+	} else if isOfd {
+		log.Printf("SendOfdProduct count: %d", len(products))
+	}
+
+	prChunk := funk.Chunk(products, 1000)
+	if val, ok := prChunk.([][]Product); ok {
+		for _, prs := range val {
+			dataProduct := OfdProductsRequest{Data: prs, IsOfd: isOfd, IsErp: isErp}
+			resp, err := client.R().
+				SetHeaders(m.getHeader()).
+				SetBody(dataProduct).
+				Post(fmt.Sprintf("%s/api/v1/erp/products/ofd", m.BaseUrl))
+			log.Printf("Статус отправки ofd продуктов %s", resp.Status())
+			if resp.Status() != "200 OK" {
+				log.Println(resp)
+			}
+			if err != nil {
+				m.Log.Warningf("[WARNING] SendProduct: %v", err)
+			}
+		}
+	}
+}
+
 func (m *Marketpalce) SendReceipt(receipts []store.Receipt) {
 	m.auth()
 	err := m.Log.Infof("SendReceipts Valid count: %d", len(receipts))
@@ -145,10 +192,29 @@ func (m *Marketpalce) SendReceiptN(receipts []store.ReceiptN) {
 func (m *Marketpalce) GetMatchProduct() MatchProducts {
 	m.auth()
 	matchProducts := MatchProducts{}
+	url := fmt.Sprintf("%s/api/v1/erp/products/match", m.BaseUrl)
 	resp, err := client.R().
 		SetHeaders(m.getHeader()).
 		SetResult(&matchProducts).
-		Get(fmt.Sprintf("%s/api/v1/erp/products/match", m.BaseUrl))
+		Get(url)
+	log.Printf("Статус получения мачинга %s", resp.Status())
+	if resp.Status() != "200 OK" {
+		log.Println(resp)
+	}
+	if err != nil {
+		m.Log.Warningf("[WARNING] GetMatchProduct: %v", err)
+	}
+	return matchProducts
+}
+
+func (m *Marketpalce) GetMatchProducts(filterDate string, isOfd bool, isErp bool) MatchProducts {
+	m.auth()
+	matchProducts := MatchProducts{}
+	url := fmt.Sprintf("%s/api/v1/erp/products/ofd?filterDate=%s&isOfd=%t&isErp=%t", m.BaseUrl, filterDate, isOfd, isErp)
+	resp, err := client.R().
+		SetHeaders(m.getHeader()).
+		SetResult(&matchProducts).
+		Get(url)
 	log.Printf("Статус получения мачинга %s", resp.Status())
 	if resp.Status() != "200 OK" {
 		log.Println(resp)

@@ -41,6 +41,7 @@ type MarketplaceOptions struct {
 type OfdOptions struct {
 	Type        string `long:"type" env:"TYPE" description:"выбор ОФД" choice:"OFD_YA" default:"OFD_YA"`
 	AccessToken string `long:"accessToken" env:"ACCESS_TOKEN" default:"...." description:"Ключи доступа"`
+	IsLocal     string `long:"isLocal" env:"IS_LOCAL" default:"false" description:"Сохранять базу ОФД локально"`
 }
 
 type UniFarmOptions struct {
@@ -85,6 +86,7 @@ func Load() {
 	ofdOptions = append(ofdOptions, OfdOptions{
 		Type:        os.Getenv("OFD_TYPE"),
 		AccessToken: os.Getenv("OFD_TOKEN"),
+		IsLocal: 	 os.Getenv("OFD_LOCAL"),
 	})
 
 	for i := 1; i <= 50; i++ {

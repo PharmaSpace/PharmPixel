@@ -3,10 +3,11 @@ module Pixel
 go 1.13
 
 require (
+	github.com/DATA-DOG/go-sqlmock v1.4.1
 	github.com/PharmaSpace/OfdYa v1.0.2
 	github.com/PharmaSpace/ofdru v1.0.0
 	github.com/PharmaSpace/oneofd v1.0.6
-	github.com/PharmaSpace/platformOfd v1.1.1
+	github.com/PharmaSpace/platformOfd v1.1.3
 	github.com/PharmaSpace/sbis v1.8.2
 	github.com/PharmaSpace/taxcom v1.0.9
 	github.com/andybalholm/cascadia v1.1.0 // indirect
@@ -25,9 +26,8 @@ require (
 	github.com/mattn/go-sqlite3 v1.11.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pkg/errors v0.8.1
-	github.com/stretchr/testify v1.5.1
+	github.com/stretchr/testify v1.6.1
 	github.com/thoas/go-funk v0.4.0
-	golang.org/x/net v0.0.0-20200513185701-a91f0712d120 // indirect
-	golang.org/x/text v0.3.2
+	golang.org/x/net v0.0.0-20200707034311-ab3426394381 // indirect
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 )

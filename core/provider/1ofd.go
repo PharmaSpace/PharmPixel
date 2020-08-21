@@ -2,10 +2,11 @@ package provider
 
 import (
 	"Pixel/core/model"
+	"Pixel/helper"
+	"fmt"
 	"github.com/PharmaSpace/oneofd"
 	"github.com/patrickmn/go-cache"
 	"log"
-	"strings"
 	"time"
 )
 
@@ -33,8 +34,9 @@ func (ofd *OneOfd) GetReceipts(date time.Time) {
 	receipts, _ := oneofd.OneOfd(ofd.Login, ofd.Password).GetReceipts(date)
 	rCache := make(map[string][]oneofd.Receipt)
 	for _, v := range receipts {
+		fmt.Println(v.Date)
 		for _, pr := range v.Products {
-			name := cut(strings.ToLower(strings.Trim(pr.Name, "\t \n")), 32)
+			name := helper.Cut(pr.Name, 32)
 			rCache[name] = append(rCache[name], v)
 		}
 	}
@@ -55,3 +57,22 @@ func (ofd *OneOfd) GetReceipts(date time.Time) {
 func (ofd *OneOfd) GetName() string {
 	return ofd.Type
 }
+
+//func convertOneOfdReceiptToDocument(receipt oneofd.Receipt, product oneofd.Product) model.Document {
+//	date, _ := receipt.Date
+//	return model.Document{
+//		DateTime:              0,
+//		FiscalDocumentNumber:  0,
+//		KktRegId:              "",
+//		Nds20:                 0,
+//		TotalSum:              0,
+//		ProductName:           "",
+//		ProductQuantity:       0,
+//		ProductPrice:          0,
+//		ProductTotalPrice:     0,
+//		Link:                  "",
+//		Ofd:                   "",
+//		FiscalDocumentNumber2: "",
+//		FiscalDocumentNumber3: "",
+//	}
+//}
