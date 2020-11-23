@@ -1,25 +1,26 @@
 package provider
 
 import (
-	"Pixel/core/model"
-	"Pixel/helper"
 	"fmt"
 	"github.com/PharmaSpace/taxcom"
 	"github.com/patrickmn/go-cache"
-	"math"
+	"pixel/core/model"
+	"pixel/helper"
 	"strconv"
 	"time"
 )
 
+// TaxCom структура
 type TaxCom struct {
 	Cache        *cache.Cache
 	Type         string
 	Login        string
 	Password     string
-	IdIntegrator string
+	IDIntegrator string
 }
 
-func (ofd *TaxCom) CheckReceipt(productName string, fd string, datePay time.Time, totalPrice int) (document model.Document, err error) {
+// CheckReceipt  проверка чека
+func (ofd *TaxCom) CheckReceipt(productName, fd string, datePay time.Time, totalPrice int) (document model.Document, err error) {
 	if receipts, ok := ofd.Cache.Get(productName); ok {
 		for _, v := range receipts.([]taxcom.Receipt) {
 			if fd == v.FD || fd == v.FP {
@@ -31,10 +32,11 @@ func (ofd *TaxCom) CheckReceipt(productName string, fd string, datePay time.Time
 	return document, err
 }
 
+// GetReceipts получить чека
 func (ofd *TaxCom) GetReceipts(date time.Time) {
-	accountList := taxcom.Taxcom(ofd.Login, ofd.Password, ofd.IdIntegrator, "").GetAccountList()
+	accountList := taxcom.Taxcom(ofd.Login, ofd.Password, ofd.IDIntegrator, "").GetAccountList()
 	for _, account := range accountList {
-		receipts, _ := taxcom.Taxcom(ofd.Login, ofd.Password, ofd.IdIntegrator, account).GetReceipts(date)
+		receipts, _ := taxcom.Taxcom(ofd.Login, ofd.Password, ofd.IDIntegrator, account).GetReceipts(date)
 		rCache := make(map[string][]model.Document)
 		for _, v := range receipts {
 			for _, pr := range v.Products {
@@ -43,11 +45,18 @@ func (ofd *TaxCom) GetReceipts(date time.Time) {
 				rCache[name] = append(rCache[name], document)
 			}
 		}
+		// Специальный кусок чтобы добавить в ключ чеков
+		for k := range rCache {
+			if item, ok := ofd.Cache.Get(k); ok {
+				receipts := item.([]model.Document)
+				rCache[k] = append(rCache[k], receipts...)
+			}
+		}
+
 		for k, v := range rCache {
 			ofd.Cache.Set(k, v, 12*time.Hour)
 		}
 	}
-
 }
 
 func (ofd *TaxCom) buildDocument(receipt taxcom.Receipt, product taxcom.Product) model.Document {
@@ -60,7 +69,7 @@ func (ofd *TaxCom) buildDocument(receipt taxcom.Receipt, product taxcom.Product)
 	document.Ofd = "taxcom"
 
 	fiscalDocumentNumber, _ := strconv.Atoi(receipt.FD)
-	document.KktRegId = receipt.KktRegId
+	document.KktRegID = receipt.KktRegId
 	document.Link = receipt.Link
 	document.TotalSum = receipt.Price
 	document.FiscalDocumentNumber = fiscalDocumentNumber
@@ -76,13 +85,14 @@ func (ofd *TaxCom) buildDocument(receipt taxcom.Receipt, product taxcom.Product)
 	document.ProductTotalPrice = product.TotalPrice
 	document.ProductQuantity = product.Quantity
 	if document.ProductQuantity == 0 {
-		document.ProductQuantity = int(math.Ceil(float64(product.TotalPrice / product.Price)))
+		document.ProductQuantity = int(float64(product.TotalPrice / product.Price))
 	}
 	document.ProductName = product.Name
 
 	return document
 }
 
+// GetName получить тип
 func (ofd *TaxCom) GetName() string {
 	return ofd.Type
 }

@@ -1,14 +1,16 @@
 package provider
 
 import (
-	"Pixel/core/model"
-	"Pixel/helper"
 	"github.com/PharmaSpace/platformOfd"
 	"github.com/patrickmn/go-cache"
+	"pixel/core/model"
+	"pixel/helper"
 	"strconv"
+	"strings"
 	"time"
 )
 
+// PlatformOfd структура
 type PlatformOfd struct {
 	Cache    *cache.Cache
 	Type     string
@@ -16,7 +18,8 @@ type PlatformOfd struct {
 	Password string
 }
 
-func (ofd *PlatformOfd) CheckReceipt(productName string, fd string, datePay time.Time, totalPrice int) (document model.Document, err error) {
+// CheckReceipt проверка чека
+func (ofd *PlatformOfd) CheckReceipt(productName, fd string, datePay time.Time, totalPrice int) (document model.Document, err error) {
 	if receipts, ok := ofd.Cache.Get(productName); ok {
 		for _, v := range receipts.([]platformOfd.Receipt) {
 			if fd == v.FD {
@@ -27,6 +30,8 @@ func (ofd *PlatformOfd) CheckReceipt(productName string, fd string, datePay time
 	}
 	return document, err
 }
+
+// GetReceipts получить чек
 func (ofd *PlatformOfd) GetReceipts(date time.Time) {
 	pOfd := platformOfd.PlatformOfd(ofd.Login, ofd.Password)
 	receipts, _ := pOfd.GetReceipts(date)
@@ -40,33 +45,50 @@ func (ofd *PlatformOfd) GetReceipts(date time.Time) {
 		}
 	}
 
+	for k := range rCache {
+		if item, ok := ofd.Cache.Get(k); ok {
+			receipts := item.([]model.Document)
+			rCache[k] = append(rCache[k], receipts...)
+		}
+	}
+
 	for k, v := range rCache {
 		ofd.Cache.Set(k, v, 12*time.Hour)
 	}
 }
 
+// GetName получит тип
 func (ofd *PlatformOfd) GetName() string {
 	return ofd.Type
 }
 
 func convertPlatformOfdToDocument(receipt platformOfd.Receipt, product platformOfd.Product) model.Document {
+	var (
+		document model.Document
+	)
 	date, _ := strconv.ParseInt(receipt.Date, 10, 64)
-	date = date / 1000
+	date /= 1000
 	fd, _ := strconv.ParseInt(receipt.FD, 10, 32)
-	tp, _ := strconv.ParseInt(product.TotalPrice, 10, 32)
-	return model.Document{
+	tp, _ := strconv.Atoi(strings.ReplaceAll(product.TotalPrice, ",", ""))
+	document = model.Document{
 		DateTime:              date,
 		FiscalDocumentNumber:  int(fd),
-		KktRegId:              "",
+		KktRegID:              "",
 		Nds20:                 product.Vat,
 		TotalSum:              receipt.Price,
 		ProductName:           product.Name,
-		ProductQuantity:       product.Quantity,
-		ProductPrice:          product.Price,
-		ProductTotalPrice:     int(tp),
+		ProductTotalPrice:     tp,
 		Link:                  receipt.Link,
 		Ofd:                   "platformOfd",
 		FiscalDocumentNumber2: receipt.FP,
 		FiscalDocumentNumber3: "",
 	}
+	for _, rp := range receipt.Products {
+		if rp.Name == product.Name {
+			document.ProductPrice = rp.Price
+			document.ProductQuantity = rp.Quantity
+			continue
+		}
+	}
+	return document
 }

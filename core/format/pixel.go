@@ -1,9 +1,6 @@
 package format
 
 import (
-	"Pixel/config"
-	"Pixel/core/model"
-	"Pixel/store/service"
 	"archive/zip"
 	"encoding/csv"
 	"fmt"
@@ -14,13 +11,17 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"pixel/config"
+	"pixel/core/model"
+	"pixel/store/service"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 )
 
-type pixel struct {
+// Pixel структура
+type Pixel struct {
 	date             time.Time
 	Config           *config.Config
 	MP               service.MarketPlaceInterface
@@ -30,149 +31,178 @@ type pixel struct {
 	cache            *cache.Cache
 }
 
-func (p *pixel) GetCache(key string) (interface{}, bool) {
+// GetCache получение кеша по ключу
+func (p *Pixel) GetCache(key string) (interface{}, bool) {
 	if p.cache == nil {
 		return nil, false
 	}
 	return p.cache.Get(key)
 }
 
-func (p *pixel) GetOFDCache(key string) (interface{}, bool) {
+// GetOFDCache получение кеша по ключу
+func (p *Pixel) GetOFDCache(key string) (interface{}, bool) {
 	if p.matchingOfdCache == nil {
 		return nil, false
 	}
 	return p.matchingOfdCache.Get(key)
 }
 
-func (p *pixel) GetERPCache(key string) (interface{}, bool) {
+// GetERPCache получение кеша по ключу
+func (p *Pixel) GetERPCache(key string) (interface{}, bool) {
 	if p.matchingErpCache == nil {
 		return nil, false
 	}
 	return p.matchingErpCache.Get(key)
 }
 
-func (p *pixel) SetOFDCache(key string, val interface{}, duration time.Duration) {
+// SetOFDCache получение кеша по ключу
+func (p *Pixel) SetOFDCache(key string, val interface{}, duration time.Duration) {
 	if p.matchingOfdCache == nil {
 		return
 	}
 	p.matchingOfdCache.Set(key, val, duration)
 }
 
-
-func (p *pixel) SetERPCache(key string, val interface{}, duration time.Duration) {
+// SetERPCache установка кеша по ключу
+func (p *Pixel) SetERPCache(key string, val interface{}, duration time.Duration) {
 	if p.matchingErpCache == nil {
 		return
 	}
 	p.matchingOfdCache.Set(key, val, duration)
 }
 
-func (p *pixel) GetMP() service.MarketPlaceInterface {
+// GetMP получение инстанса для маркетплейса
+func (p *Pixel) GetMP() service.MarketPlaceInterface {
 	return p.MP
 }
 
-func (p *pixel) GetDate() time.Time {
+// GetDate получение даты
+func (p *Pixel) GetDate() time.Time {
 	return p.date
 }
 
-func Pixel(cf *config.Config, mp service.MarketPlaceInterface, ch *cache.Cache, log serviceLib.Logger, date time.Time) *pixel {
+// NewPixel формат Пикселя
+func NewPixel(cf *config.Config, mp service.MarketPlaceInterface, ch *cache.Cache, l serviceLib.Logger, date time.Time) *Pixel {
 	matchingOfdCache := cache.New(5*time.Minute, 10*time.Minute)
 	matchingErpCache := cache.New(5*time.Minute, 10*time.Minute)
 
-	return &pixel{Config: cf, cache: ch, MP: mp, Log: log, matchingErpCache: matchingErpCache, matchingOfdCache: matchingOfdCache, date: date}
+	return &Pixel{Config: cf, cache: ch, MP: mp, Log: l, matchingErpCache: matchingErpCache, matchingOfdCache: matchingOfdCache, date: date}
 }
 
-func (p *pixel) Parse() {
+// Parse парсинг
+func (p *Pixel) Parse() {
+	p.matchingErpCache.Flush()
+	p.matchingOfdCache.Flush()
 	getMatchProducts(p)
+	var err error
 
 	// данные из кеша по чекам из ОФД
 	ofdRecieptCacheItems := p.cache.Items()
 	// чеки из ЕРП
-	erpOrder, erpProducts := p.parseFiles()
+	erpOrder, erpProducts := p.getFiles()
 
 	receipts, checkOfdProductNames := nameMatching(p, erpOrder, ofdRecieptCacheItems)
 	if len(receipts) > 0 {
-		p.MP.SendReceipt(receipts)
+		err = p.MP.SendReceipt(receipts)
+		if err != nil {
+			log.Printf("[ERROR] Ошикбка отправкии чеков")
+		}
 	}
 
 	if len(checkOfdProductNames) > 0 {
 		// отправляем товары из ofd на матчинг
 		productsForMatching := OfdProductsForMatching(checkOfdProductNames)
-		p.MP.SendOfdProducts(productsForMatching, true, false)
+		err = p.MP.SendOfdProducts(productsForMatching, true, false)
+		if err != nil {
+			log.Printf("[ERROR] Ошикбка отправкии продуктов")
+		}
 	}
 	// отправляем товары из erp на матчинг
 	productsForMatching := ErpProductsForMatching(p, p.convertProducts(erpProducts))
-	p.MP.SendOfdProducts(productsForMatching, false, true)
-}
-
-func (p *pixel) getFiles(files []os.FileInfo) {
-	for _, file := range files {
-		isZip, err := regexp.MatchString(".zip", file.Name())
-		if isZip {
-			_, ok := p.GetOFDCache(file.Name())
-			if ok {
-				p.unzip(fmt.Sprintf("%s/%s", p.Config.Files.SourceFolder, file.Name()), p.Config.Files.WorkingFolder)
-			}
-		}
-
-		if err != nil {
-			log.Print(err)
-		}
+	err = p.MP.SendOfdProducts(productsForMatching, false, true)
+	if err != nil {
+		log.Printf("[ERROR] Ошикбка отправкии продуктов")
 	}
 }
 
-func (p *pixel) parseFiles() ([]*model.Receipt, []*model.Product) {
+func (p *Pixel) getFiles() (receipts []*model.Receipt, products []*model.Product) {
 	files := p.readDir(p.Config.Files.SourceFolder)
-	p.getFiles(files)
+	for _, file := range files {
+		zipCompile := regexp.MustCompile(".zip")
+		if zipCompile.Match([]byte(file.Name())) {
+			date := p.date.AddDate(0, 0, p.Config.FormatDate)
+			fileZip, _ := regexp.MatchString(date.Format("20060102"), file.Name())
+			if fileZip {
+				p.unzip(fmt.Sprintf("%s/%s", p.Config.Files.SourceFolder, file.Name()), p.Config.Files.WorkingFolder)
+				r, pr := p.parseFiles()
+				receipts = append(receipts, r...)
+				products = append(products, pr...)
+				if p.Config.Files.BackupFolder != "" {
+					err := os.Rename(fmt.Sprintf("%s/%s", p.Config.Files.SourceFolder, file.Name()), fmt.Sprintf("%s/%s", p.Config.Files.BackupFolder, file.Name()))
+					if err != nil {
+						log.Fatal(err)
+					}
+				}
+			}
+		}
+	}
+	return receipts, products
+}
 
+func (p *Pixel) parseFiles() ([]*model.Receipt, []*model.Product) {
 	filesUnzip := p.readDir(p.Config.Files.WorkingFolder)
 	AllOrders := make([]*model.Receipt, 0)
 	AllProducts := make([]*model.Product, 0)
 	for _, file := range filesUnzip {
-		product, _ := regexp.MatchString("products.csv", file.Name())
-		order, _ := regexp.MatchString("orders.csv", file.Name())
+		productCompile := regexp.MustCompile("products.csv")
+		orderCompile := regexp.MustCompile("orders.csv")
 		filePath := fmt.Sprintf("%s/%s", p.Config.Files.WorkingFolder, file.Name())
-		doneFilePath := fmt.Sprintf("%s/%s/%s", p.Config.Files.WorkingFolder, "done", file.Name())
-		if product {
+		if productCompile.Match([]byte(file.Name())) {
 			products := p.parsingProductFile(filePath)
-			err := os.Rename(filePath, doneFilePath)
-			if err != nil {
-				p.Log.Errorf("Ошибка удаления файла продуктов %+v", err)
-			}
 			AllProducts = append(AllProducts, products...)
-		}
-		if order {
-			orders := p.parsingOrderFile(filePath)
-			err := os.Rename(filePath, doneFilePath)
-			if err != nil {
-				p.Log.Errorf("Ошибка удаления файла заказов %+v", err)
+			if err := os.Remove(filePath); err != nil {
+				err = p.Log.Errorf("%v", err)
+				if err != nil {
+					log.Printf("[ERROR] Ошибка удаления файла продуктов%v", err)
+				}
 			}
+		}
+		if orderCompile.Match([]byte(file.Name())) {
+			orders := p.parsingOrderFile(filePath)
 			AllOrders = append(AllOrders, orders...)
+			if err := os.Remove(filePath); err != nil {
+				err = p.Log.Errorf("%v", err)
+				if err != nil {
+					log.Printf("[ERROR] Ошибка удаления файла чеков %v", err)
+				}
+			}
 		}
 	}
 	return AllOrders, AllProducts
 }
 
 // convertProducts - конвертирует продукты для отправки на матчинг
-func (p *pixel) convertProducts(record []*model.Product) []service.Product {
+func (p *Pixel) convertProducts(record []*model.Product) []service.Product {
 	products := []service.Product{}
 
 	for _, record := range record {
-		products = append(products, service.Product{
-			Name:          record.Name,
-			Manufacturer:  record.Manufacturer,
-			PartNumber:    record.ShipmentNumber,
-			Serial:        record.Series,
-			Stock:         record.Inventory,
-			WarehouseName: record.PharmacyID,
-			SupplerName:   record.Supplier,
-			SupplerInn:    record.SupplierINN,
-		})
+		var product service.Product
+		product.Name = record.Name
+		product.Manufacturer = record.Manufacturer
+		product.PartNumber = record.ShipmentNumber
+		product.Serial = record.Series
+		product.Stock = record.Inventory
+		product.WarehouseName = record.PharmacyID
+		product.SupplerName = record.Supplier
+		product.SupplerInn = record.SupplierINN
+		product.CreatedAt = p.date.Format(time.RFC3339Nano)
+		products = append(products, product)
 	}
 	return products
 }
 
-func (p *pixel) parsingOrderFile(file string) (orders []*model.Receipt) {
-	records, _ := p.convertCsvToStruct(file, 15)
+func (p *Pixel) parsingOrderFile(file string) (orders []*model.Receipt) {
+	records, _ := p.convertCsvToStruct(file, 16)
 
 	for i, record := range records {
 		if i == 0 {
@@ -202,8 +232,8 @@ func (p *pixel) parsingOrderFile(file string) (orders []*model.Receipt) {
 	return orders
 }
 
-func (p *pixel) parsingProductFile(file string) (products []*model.Product) {
-	records, _ := p.convertCsvToStruct(file, 7)
+func (p *Pixel) parsingProductFile(file string) (products []*model.Product) {
+	records, _ := p.convertCsvToStruct(file, 11)
 	for i, record := range records {
 		if i == 0 {
 			continue
@@ -211,7 +241,10 @@ func (p *pixel) parsingProductFile(file string) (products []*model.Product) {
 		record[9] = strings.Replace(record[9], ",", ".", -1)
 		quantity, err := strconv.ParseFloat(record[9], 64)
 		if err != nil {
-			p.Log.Errorf("convert string to float64: %v", err)
+			err = p.Log.Errorf("convert quantity string to float64: %v", err)
+			if err != nil {
+				log.Printf("convert quantity string to float64: %v", err)
+			}
 		}
 		products = append(products, &model.Product{
 			PharmacyID:      record[0],
@@ -231,29 +264,36 @@ func (p *pixel) parsingProductFile(file string) (products []*model.Product) {
 	return products
 }
 
-func (p *pixel) convertCsvToStruct(file string, l int) (outRecord [][]string, err error) {
-	readFile, err := ioutil.ReadFile(file)
+func (p *Pixel) convertCsvToStruct(file string, l int) (outRecord [][]string, err error) {
+	readFile, err := ioutil.ReadFile(filepath.Clean(file))
 	if err != nil {
-		p.Log.Errorf("Error read file: %v", err)
+		err = p.Log.Errorf("Error read file: %v", err)
+		if err != nil {
+			log.Printf("Error read file: %v", err)
+		}
 	}
 	sourceFile := string(readFile)
-	sourceFile = strings.Replace(sourceFile, "\r", "", -1)
+	sourceFile = strings.ReplaceAll(sourceFile, "\r", "")
+	// лайфхак для лидерфармы
+	sourceFile = strings.ReplaceAll(sourceFile, "\",\"", ";")
+	sourceFile = strings.ReplaceAll(sourceFile, "\"", "")
 
 	fileIO := strings.NewReader(sourceFile)
 	r := csv.NewReader(fileIO)
-	r.Comma = ','
+	r.Comma = ';'
 	r.LazyQuotes = true
-	for {
-		record, err := r.Read()
-		if err == io.EOF {
-			break
-		}
-		if len(record) < l {
-			p.Log.Errorf("Не совпадает количество значений в файле: %s", file)
+	r.FieldsPerRecord = -1
+	records, err := r.ReadAll()
+	for i, record := range records {
+		lenRecord := len(record)
+		if lenRecord <= 1 {
 			continue
 		}
-		if err != nil {
-			p.Log.Errorf("Ошибка парсинга файла: %s | %v", file, err)
+		if lenRecord < l {
+			err = p.Log.Errorf("%s: не совпадает количество значений в строке. Ожидаемое количество: %v Пришло: %v Строка: %v", file, l, lenRecord, i)
+			if err != nil {
+				log.Printf("%s: не совпадает количество значений в строке. Ожидаемое количество: %v Пришло: %v Строка: %v", file, l, lenRecord, i)
+			}
 			continue
 		}
 		outRecord = append(outRecord, record)
@@ -261,31 +301,44 @@ func (p *pixel) convertCsvToStruct(file string, l int) (outRecord [][]string, er
 	return outRecord, err
 }
 
-func (p *pixel) readDir(dir string) (files []os.FileInfo) {
+func (p *Pixel) readDir(dir string) (files []os.FileInfo) {
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
-		p.Log.Errorf("[ERR] Ошибка чтения директории %s| %v", dir, err)
+		err = p.Log.Errorf("[ERR] Ошибка чтения директории %s| %v", dir, err)
+		if err != nil {
+			log.Printf("[ERR] Ошибка чтения директории %s| %v", dir, err)
+		}
 	}
 	return files
 }
 
-func (p *pixel) unzip(fileName string, targetDir string) {
+func (p *Pixel) unzip(fileName, targetDir string) {
 	zipReader, _ := zip.OpenReader(fileName)
 	for _, file := range zipReader.Reader.File {
 
 		zippedFile, err := file.Open()
 		if err != nil {
-			p.Log.Errorf("[ERR] Ошибка чтения файла | %v", err)
+			err = p.Log.Errorf("[ERR] Ошибка чтения файла | %v", err)
+			if err != nil {
+				log.Printf("[ERR] Ошибка чтения файла | %v", err)
+				return
+			}
+			return
 		}
-		defer zippedFile.Close()
 
-		extractedFilePath := filepath.Join(
-			targetDir,
-			file.Name,
-		)
+		// #nosec G305
+		extractedFilePath := filepath.Join(targetDir, file.Name)
+		if !strings.HasPrefix(extractedFilePath, filepath.Clean(targetDir)+string(os.PathSeparator)) {
+			log.Printf("%s: illegal file path", extractedFilePath)
+			return
+		}
 
 		if file.FileInfo().IsDir() {
-			os.MkdirAll(extractedFilePath, file.Mode())
+			err = os.MkdirAll(extractedFilePath, file.Mode())
+			if err != nil {
+				log.Printf("[ERR] Ошибка оздания файлов | %v", err)
+				return
+			}
 		} else {
 			outputFile, err := os.OpenFile(
 				extractedFilePath,
@@ -293,14 +346,20 @@ func (p *pixel) unzip(fileName string, targetDir string) {
 				file.Mode(),
 			)
 			if err != nil {
-				p.Log.Errorf("[ERR] Ошибка распаковки файла | %v", err)
+				err = p.Log.Errorf("[ERR] Ошибка распаковки файла | %v", err)
+				if err != nil {
+					log.Printf("[ERR] Ошибка распаковки файла | %v", err)
+				}
 			}
-			defer outputFile.Close()
-
+			// #nosec G110
 			_, err = io.Copy(outputFile, zippedFile)
 			if err != nil {
-				p.Log.Errorf("[ERR] Ошибка копирование содержимого архива | %v", err)
+				err = p.Log.Errorf("[ERR] Ошибка копирование содержимого архива | %v", err)
+				if err != nil {
+					log.Printf("[ERR] Ошибка копирование содержимого архива | %v", err)
+				}
 			}
 		}
 	}
+	defer zipReader.Close()
 }

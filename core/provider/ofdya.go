@@ -1,21 +1,23 @@
 package provider
 
 import (
-	"Pixel/core/model"
-	"Pixel/helper"
 	"github.com/PharmaSpace/OfdYa"
 	"github.com/patrickmn/go-cache"
 	"log"
+	"pixel/core/model"
+	"pixel/helper"
 	"time"
 )
 
+// Ofdya структра
 type Ofdya struct {
 	Cache *cache.Cache
 	Type  string
 	Token string
 }
 
-func (ofd *Ofdya) CheckReceipt(productName string, fd string, datePay time.Time, totalPrice int) (document model.Document, err error) {
+// CheckReceipt проверка чека
+func (ofd *Ofdya) CheckReceipt(productName, fd string, datePay time.Time, totalPrice int) (document model.Document, err error) {
 	if receipts, ok := ofd.Cache.Get(productName); ok {
 		for _, v := range receipts.([]OfdYa.Receipt) {
 			if fd == v.FD || fd == v.FP {
@@ -27,6 +29,7 @@ func (ofd *Ofdya) CheckReceipt(productName string, fd string, datePay time.Time,
 	return document, err
 }
 
+// GetReceipts получение чека
 func (ofd *Ofdya) GetReceipts(date time.Time) {
 	pOfd := OfdYa.OfdYa(ofd.Token)
 	receipts, _ := pOfd.GetReceipts(date)
@@ -39,7 +42,7 @@ func (ofd *Ofdya) GetReceipts(date time.Time) {
 		}
 	}
 
-	for k, _ := range rCache {
+	for k := range rCache {
 		if item, ok := ofd.Cache.Get(k); ok {
 			receipts := item.([]OfdYa.Receipt)
 			rCache[k] = append(rCache[k], receipts...)
@@ -52,6 +55,7 @@ func (ofd *Ofdya) GetReceipts(date time.Time) {
 	log.Printf("Получено чеков: %d", len(rCache))
 }
 
+// GetName получение типа
 func (ofd *Ofdya) GetName() string {
 	return ofd.Type
 }

@@ -1,16 +1,17 @@
 package provider
 
 import (
-	"Pixel/core/model"
-	"Pixel/helper"
 	"github.com/PharmaSpace/sbis"
 	"github.com/patrickmn/go-cache"
 	"log"
+	"pixel/core/model"
+	"pixel/helper"
 	"strconv"
 	"strings"
 	"time"
 )
 
+// Sbis структура
 type Sbis struct {
 	Cache    *cache.Cache
 	Type     string
@@ -19,26 +20,30 @@ type Sbis struct {
 	Password string
 }
 
-func (ofd *Sbis) CheckReceipt(productName string, fp string, datePay time.Time, totalPrice int) (document model.Document, err error) {
+// CheckReceipt проверка чека
+func (ofd *Sbis) CheckReceipt(productName, fp string, datePay time.Time, totalPrice int) (document model.Document, err error) {
 	if receipts, ok := ofd.Cache.Get(strings.ToUpper(productName)); ok {
 		for _, v := range receipts.([]*sbis.Receipt) {
 			if fp == strconv.Itoa(v.RequestNumber) || totalPrice == v.TotalSum {
 				for _, i := range v.Items {
-					if i.Name == strings.ToUpper(productName) {
-						date, _ := time.Parse("2006-01-02T15:04:05", v.ReceiveDateTime)
-						document.DateTime = date.Unix()
-						document.Link = v.Url
-						document.FiscalDocumentNumber = v.FiscalDocumentNumber
-						document.KktRegId = v.KktRegID
-						document.ProductPrice = i.Price
-						document.TotalSum = v.TotalSum
+					if !strings.EqualFold(i.Name, productName) {
+						continue
 					}
+					date, _ := time.Parse("2006-01-02T15:04:05", v.ReceiveDateTime)
+					document.DateTime = date.Unix()
+					document.Link = v.Url
+					document.FiscalDocumentNumber = v.FiscalDocumentNumber
+					document.KktRegID = v.KktRegID
+					document.ProductPrice = i.Price
+					document.TotalSum = v.TotalSum
 				}
 			}
 		}
 	}
 	return document, err
 }
+
+// GetReceipts получить чек
 func (ofd *Sbis) GetReceipts(date time.Time) {
 	startDate := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, time.Local)
 	endDate := time.Date(date.Year(), date.Month(), date.Day(), 23, 59, 59, 59, time.Local)
@@ -58,11 +63,11 @@ func (ofd *Sbis) GetReceipts(date time.Time) {
 		}
 	}
 
-	for k, _ := range rCache {
+	for k := range rCache {
 		if item, ok := ofd.Cache.Get(k); ok {
 			receipts := item.([]*sbis.Receipt)
 			for _, receipt := range receipts {
-				for i, _ := range receipt.Items {
+				for i := range receipt.Items {
 					rCache[k] = append(rCache[k], sbisReceiptToDocument(receipt, i))
 				}
 			}
@@ -76,15 +81,16 @@ func (ofd *Sbis) GetReceipts(date time.Time) {
 	log.Printf("Получено чеков: %d", len(rCache))
 }
 
+// GetName получить тип
 func (ofd *Sbis) GetName() string {
 	return ofd.Type
 }
 
-func sbisReceiptToDocument (receipt *sbis.Receipt, itemNum int) model.Document {
+func sbisReceiptToDocument(receipt *sbis.Receipt, itemNum int) model.Document {
 	document := model.Document{
 		DateTime:              int64(receipt.DateTime),
 		FiscalDocumentNumber:  receipt.FiscalDocumentNumber,
-		KktRegId:              receipt.KktRegID,
+		KktRegID:              receipt.KktRegID,
 		Nds20:                 receipt.NdsNo,
 		TotalSum:              receipt.TotalSum,
 		ProductName:           receipt.Items[itemNum].Name,

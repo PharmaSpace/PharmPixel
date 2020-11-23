@@ -1,9 +1,45 @@
 package format
 
 import (
-	"Pixel/config"
-	"Pixel/core/format/mock"
-	"Pixel/store/service"
+	"fmt"
+	"github.com/joho/godotenv"
+	"github.com/stretchr/testify/assert"
+	"pixel/config"
+	"testing"
+)
+
+func TestUnico_getReceipts(t *testing.T) {
+	_ = godotenv.Load("../../.env")
+	config.Load()
+
+	database, err := ConnectToErpDB(config.Cfg)
+	assert.NoError(t, err)
+
+	_, err = database.Query(fmt.Sprintf(`select PD.Podr AS 'ID АПТЕКИ', DIV.ShortName AS 'АПТЕКА',
+	FORMAT(DC.Date, 'dd/MM/yyyy') AS 'ДАТА ПРОДАЖИ',
+	DCI.FPDKKM AS 'НОМЕР ККМ', DC.CodCotter AS 'НОМЕР ЧЕКА',
+	F.NameFactory AS 'ПРОИЗВОДИТЕЛЬ', C.ShortName AS 'ПОСТАВЩИК',
+	C.INN AS 'ИНН ПОСТ.', DC.NameTMC AS 'НАИМЕНОВАНИЕ ТОВАРА',
+	L.PriceSaleNaked AS 'ЦЕНА ПРОДАЖИ БЕЗ НДС',
+	L.PriceSale AS 'ЦЕНА ПРОДАЖИ С НДС', L.SumNDSSale AS 'СУММА НДС НА ЕДИНИЦУ',
+	L.SumSale AS 'ОБЩАЯ СУММА ПО ЧЕКУ', CAST(L.Quantity as decimal(12, 2)) AS 'КОЛ-ВО',
+	'' AS 'НОМЕР ПАРТИИ', L.Serial AS 'СЕРИЙНЫЙ НОМЕР' 
+	from PDoc PD INNER JOIN ListDoc L on L.CodDoc = PD.Cod 
+	INNER JOIN DupCott DC on DC.CodListDocKredit = L.Cod AND DC.CodPodr = PD.Podr AND DC.IsStorno = 0 and DC.IsErrCot = 0 and DC.IsDelete = 0 
+	LEFT JOIN DupCotInfo DCI on DCI.CodGuid = DC.DCIGuid AND DCI.Date = DC.Date AND DCI.NumCash = DC.NumCash 
+	INNER JOIN TMC T on T.Cod = DC.CodTMC INNER JOIN Factory F on F.Cod = T.CodFactory 
+	INNER JOIN Country CT on CT.Cod = F.CodCountry INNER JOIN v_Division DIV on DIV.Cod = PD.Podr 
+	LEFT JOIN ListDoc Lco on Lco.Cod = L.CodOrig LEFT JOIN PDoc PDco on PDco.Cod = Lco.CodDoc 
+	INNER JOIN Client C on C.Cod = PDco.Client WHERE PD.DNacl >= dbo.Fn_UNI_ConvertDateFromSQL('%s') 
+	AND PD.DNacl <= dbo.Fn_UNI_ConvertDateFromSQL('%s') 
+	AND PD.DebKred = 2 AND PD.IsCassa > 0  
+	GROUP BY PD.Podr, DIV.ShortName, DC.Date, DCI.FPDKKM, DC.CodCotter, F.NameFactory, C.ShortName, C.INN, DC.NameTMC, L.PriceSaleNaked, L.PriceSale, L.SumNDSSale, L.SumSale, L.Quantity, L.Serial 
+	ORDER BY DC.NameTMC ASC`, "07.10.2020", "07.10.2020"))
+	assert.NoError(t, err)
+}
+
+/*
+import (
 	"database/sql"
 	"errors"
 	"github.com/DATA-DOG/go-sqlmock"
@@ -12,6 +48,9 @@ import (
 	"github.com/patrickmn/go-cache"
 	"github.com/stretchr/testify/assert"
 	mock2 "github.com/stretchr/testify/mock"
+	"Pixel/config"
+	"Pixel/core/format/mock"
+	"Pixel/store/service"
 	"testing"
 	"time"
 )
@@ -42,14 +81,14 @@ func TestUnico_Parse(t *testing.T) {
 	t.Run("err connect to db", func(t *testing.T) {
 		logger := windowsService.ConsoleLogger
 		config.Load()
-		cache := cache.New(5*time.Minute, 10*time.Minute)
-		setCache(cache, ofdItems)
+		c := cache.New(5*time.Minute, 10*time.Minute)
+		setCache(c, ofdItems)
 		mpMock := &mock.MarketPlaceMock{}
 		dbMock := &mock.DBMock{}
 		date := time.Now()
 
-		unico := Unico(config.Cfg, mpMock, dbMock, cache, logger, date)
-		unico.Config.UnicoOptions.SqlDriver = "test"
+		unico := NewUnico(config.Cfg, mpMock, dbMock, c, logger, date)
+		unico.Config.UnicoOptions.SQLDriver = "test"
 		mpMock.On("GetMatchProducts").Return(service.MatchProducts{}).Twice()
 		dbMock.On("Query", mock2.AnythingOfType("string"), mock2.Anything).
 			Return(sql.Rows{}, errCouldntConnectToDB)
@@ -69,14 +108,14 @@ func TestUnico_Parse(t *testing.T) {
 	t.Run("match found by invoice num", func(t *testing.T) {
 		logger := windowsService.ConsoleLogger
 		config.Load()
-		cache := cache.New(5*time.Minute, 10*time.Minute)
-		setCache(cache, ofdItems)
+		c := cache.New(5*time.Minute, 10*time.Minute)
+		setCache(c, ofdItems)
 		mpMock := &mock.MarketPlaceMock{}
 		//dbMock := &mock.DBMock{}
 		db, dbMock, _ := sqlmock.New()
 		date := time.Now()
-		unico := Unico(config.Cfg, mpMock, db, cache, logger, date)
-		unico.Config.UnicoOptions.SqlDriver = "test"
+		unico := NewUnico(config.Cfg, mpMock, db, c, logger, date)
+		unico.Config.UnicoOptions.SQLDriver = "test"
 		mpMock.On("GetMatchProducts").
 			Return(service.MatchProducts{Data: []service.MatchProductItem{{
 				Export:       true,
@@ -111,14 +150,14 @@ func TestUnico_Parse(t *testing.T) {
 	t.Run("match found by total price", func(t *testing.T) {
 		logger := windowsService.ConsoleLogger
 		config.Load()
-		cache := cache.New(5*time.Minute, 10*time.Minute)
-		setCache(cache, ofdItems)
+		c := cache.New(5*time.Minute, 10*time.Minute)
+		setCache(c, ofdItems)
 		mpMock := &mock.MarketPlaceMock{}
 		//dbMock := &mock.DBMock{}
 		db, dbMock, _ := sqlmock.New()
 		date := time.Now()
-		unico := Unico(config.Cfg, mpMock, db, cache, logger, date)
-		unico.Config.UnicoOptions.SqlDriver = "test"
+		unico := NewUnico(config.Cfg, mpMock, db, c, logger, date)
+		unico.Config.UnicoOptions.SQLDriver = "test"
 		mpMock.On("GetMatchProducts").
 			Return(service.MatchProducts{Data: []service.MatchProductItem{{
 				Export:       true,
@@ -151,24 +190,23 @@ func TestUnico_Parse(t *testing.T) {
 	})
 }
 
-func TestUnico_Manual (t *testing.T) {
+func TestUnico_Manual(t *testing.T) {
 	_ = godotenv.Overload("../../.env.test")
 	config.Load()
 	logger := windowsService.ConsoleLogger
-	marketplace := &service.Marketpalce{
+	marketplace := &service.Marketplace{
 		Revision: "3.0.1",
 		Log:      logger,
-		BaseUrl:  config.Cfg.MarketplaceOptions.BaseUrl,
+		BaseURL:  config.Cfg.MarketplaceOptions.BaseUrl,
 		Username: config.Cfg.MarketplaceOptions.Username,
 		Password: config.Cfg.MarketplaceOptions.Password,
 	}
-	cache := cache.New(5*time.Minute, 10*time.Minute)
+	c := cache.New(5*time.Minute, 10*time.Minute)
 	db, err := ConnectToErpDB(config.Cfg)
 	assert.NoError(t, err)
 	dt, err := time.Parse("02.01.2006", "02.02.2020")
 	assert.NoError(t, err)
-	unico := Unico(config.Cfg, marketplace, db, cache, logger, dt)
+	unico := NewUnico(config.Cfg, marketplace, db, c, logger, dt)
 	unico.Parse()
 }
-
-
+*/

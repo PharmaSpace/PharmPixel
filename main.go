@@ -6,12 +6,13 @@
 package main
 
 import (
-	"Pixel/config"
-	"Pixel/core"
-	"Pixel/store/service"
 	"flag"
+	"log"
 	"os"
 	"os/signal"
+	"pixel/config"
+	"pixel/core"
+	"pixel/store/service"
 	"runtime"
 	"syscall"
 	"time"
@@ -19,67 +20,71 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/juju/fslock"
 	windowsService "github.com/kardianos/service"
-	"github.com/pkg/errors"
 )
 
-var revision = "3.0.6"
+var revision = "3.0.35"
+
 var logger windowsService.Logger
 
 type program struct {
-	dataService *service.DataStore
-	exit        chan struct{}
+	exit chan struct{}
 }
 
 func (p *program) Start(s windowsService.Service) error {
+	var err error
 	if windowsService.Interactive() {
-		logger.Info("Running in terminal.")
+		err = logger.Info("Running in terminal.")
+		if err != nil {
+			return err
+		}
 	} else {
-		logger.Info("Running under service manager.")
+		err = logger.Info("Running under service manager.")
+		if err != nil {
+			return err
+		}
 	}
+
 	p.exit = make(chan struct{})
 
 	go p.run()
 	return nil
 }
 
-func (p *program) run() error {
-	logger.Infof("I'm running %v.", windowsService.Platform())
-	logger.Infof("Version: %s.", revision)
+func (p *program) run() {
+	err := logger.Infof("I'm running %v.", windowsService.Platform())
+	if err != nil {
+		log.Print(err)
+	}
+	err = logger.Infof("Version: %s.", revision)
+	if err != nil {
+		log.Print(err)
+	}
 	ticker := time.NewTicker(1 * time.Second)
 	if config.Cfg.WatchingTime > 0 {
 		ticker = time.NewTicker(config.Cfg.WatchingTime * time.Minute)
 	}
 
+	date := config.Cfg.UniFarmOptions.Date
+	if err != nil {
+		log.Print(err)
+	}
 	for {
 		select {
 		case <-ticker.C:
 			lock := fslock.New(config.Cfg.Files.WorkingFolder + "/../pixel.lock")
-			if config.Cfg.MarketplaceOptions.Username == "s.antsupov+pil@pharmecosystem.ru" ||
-				config.Cfg.MarketplaceOptions.Username == "apt4@pharmaspace.ru" ||
-				config.Cfg.MarketplaceOptions.Username == "apt3@pharmaspace.ru" ||
-				config.Cfg.MarketplaceOptions.Username == "apt2@pharmaspace.ru" ||
-				config.Cfg.MarketplaceOptions.Username == "apt@pharmaspace.ru" ||
-				config.Cfg.MarketplaceOptions.Username == "887530+at5@mail.ru" ||
-				config.Cfg.MarketplaceOptions.Username == "887530+at4@mail.ru" ||
-				config.Cfg.MarketplaceOptions.Username == "887530+at3@mail.ru" ||
-				config.Cfg.MarketplaceOptions.Username == "887530+at2@mail.ru" ||
-				config.Cfg.MarketplaceOptions.Username == "887530+at1@mail.ru" ||
-				config.Cfg.MarketplaceOptions.Username == "887530@mail.ru" {
-				_, err := os.Stat(config.Cfg.Files.WorkingFolder + "/../updated.lock")
-				if os.IsNotExist(err) {
-					config.Cfg.UniFarmOptions.Date = "01.08.2020"
-					os.Create(config.Cfg.Files.WorkingFolder + "/../updated.lock")
-				} else {
-					config.Cfg.UniFarmOptions.Date = time.Now().Format("01.08.2020")
-				}
-			}
 
-			lock.Lock()
-			lock.Unlock()
-			marketplace := &service.Marketpalce{
+			err = lock.Lock()
+			if err != nil {
+				log.Print(err)
+			}
+			err = lock.Unlock()
+			if err != nil {
+				log.Print(err)
+			}
+			marketplace := &service.Marketplace{
 				Revision: revision,
 				Log:      logger,
-				BaseUrl:  config.Cfg.MarketplaceOptions.BaseUrl,
+				BaseURL:  config.Cfg.MarketplaceOptions.BaseURL,
 				Username: config.Cfg.MarketplaceOptions.Username,
 				Password: config.Cfg.MarketplaceOptions.Password,
 			}
@@ -87,25 +92,33 @@ func (p *program) run() error {
 			c := core.Core{
 				Log:         logger,
 				Version:     revision,
-				DataService: p.dataService,
 				SourceDir:   config.Cfg.Files.SourceFolder,
 				Marketplace: marketplace,
 				Config:      config.Cfg,
 			}
 
 			c.Exec()
-			os.Remove(config.Cfg.Files.WorkingFolder + "/../pixel.lock")
+			err = os.Remove(config.Cfg.Files.WorkingFolder + "/../pixel.lock")
+			if err != nil {
+				log.Printf("[ERROR] remove lock %v", err)
+			}
 		case <-p.exit:
 			ticker.Stop()
-			return nil
+			return
 		}
 	}
 }
 
 func (p *program) Stop(s windowsService.Service) error {
-	logger.Info("I'm Stopping!")
+	err := logger.Info("I'm Stopping!")
+	if err != nil {
+		log.Print("I'm Stopping!")
+	}
 	close(p.exit)
-	os.Remove(config.Cfg.Files.WorkingFolder + "/../pixel.lock")
+	err = os.Remove(config.Cfg.Files.WorkingFolder + "/../pixel.lock")
+	if err != nil {
+		log.Printf("[ERROR] remove lock %v", err)
+	}
 	return nil
 }
 
@@ -116,47 +129,61 @@ func main() {
 	options["Restart"] = "on-success"
 	options["SuccessExitStatus"] = "1 2 8 SIGKILL"
 	svcConfig := &windowsService.Config{
-		Name:        "Pixel",
-		DisplayName: "Pixel",
-		Description: "Данный сервис служит для обмена информацией между маркетплейсом и аптечной точко",
-		Dependencies: []string{
-			"Requires=network.target",
-			"After=network-online.target syslog.target"},
-		Option: options,
+		Name:         "Pixel",
+		DisplayName:  "Pixel",
+		Description:  "Данный сервис служит для обмена информацией между маркетплейсом и аптечной точко",
+		Dependencies: []string{},
+		Option:       options,
 	}
 
 	prg := &program{}
 	s, err := windowsService.New(prg, svcConfig)
 	if err != nil {
-		logger.Error(err)
+		err = logger.Error(err)
+		if err != nil {
+			log.Print(err)
+		}
 	}
 	errs := make(chan error, 5)
 	logger, err = s.Logger(errs)
 	if err != nil {
-		logger.Error(err)
+		log.Print(err)
 	}
 
 	go func() {
 		for {
-			err := <-errs
+			err = <-errs
 			if err != nil {
-				logger.Error(err)
+				err = logger.Error(err)
+				if err != nil {
+					log.Print(err)
+				}
 			}
 		}
 	}()
 
-	if len(*svcFlag) != 0 {
-		err := windowsService.Control(s, *svcFlag)
+	if *svcFlag != "" {
+		err = windowsService.Control(s, *svcFlag)
 		if err != nil {
-			logger.Errorf("Valid actions: %q\n", windowsService.ControlAction)
-			logger.Error(err)
+			err = logger.Errorf("Valid actions: %q\n", windowsService.ControlAction)
+			if err != nil {
+				log.Print(err)
+			}
+			err = logger.Error(err)
+			if err != nil {
+				log.Print(err)
+			}
 		}
 		return
 	}
 	err = s.Run()
 	if err != nil {
-		logger.Error(err)
+		err = logger.Error(err)
+		if err != nil {
+			log.Print(err)
+		}
 	}
+
 }
 
 func getDump() string {
@@ -169,27 +196,16 @@ func getDump() string {
 	return string(stacktrace[:length])
 }
 
+//nolint:gochecknoinits // can't avoid it in this place
 func init() {
-	envFlag := flag.String("env", ".env", "env file path")
-	flag.Parse()
-	_ = godotenv.Load(*envFlag)
+	_ = godotenv.Load(".env")
 	config.Load()
 
 	sigChan := make(chan os.Signal)
 	go func() {
 		for range sigChan {
-			logger.Infof("[INFO] SIGQUIT detected, dump:\n%s", getDump())
+			log.Printf("[INFO] SIGQUIT detected, dump:\n%s", getDump())
 		}
 	}()
 	signal.Notify(sigChan, syscall.SIGQUIT)
-}
-
-// mkdir -p for all dirs
-func makeDirs(dirs ...string) error {
-	for _, dir := range dirs {
-		if err := os.MkdirAll(dir, 0700); err != nil { // If path is already a directory, MkdirAll does nothing
-			return errors.Wrapf(err, "can't make directory %s", dir)
-		}
-	}
-	return nil
 }

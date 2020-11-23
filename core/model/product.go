@@ -2,6 +2,7 @@ package model
 
 import "time"
 
+// Product структура продкута
 type Product struct {
 	PharmacyID      string
 	PharmacyAddress string

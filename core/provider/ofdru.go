@@ -1,16 +1,17 @@
 package provider
 
 import (
-	"Pixel/core/model"
-	"Pixel/helper"
 	"github.com/PharmaSpace/ofdru"
 	"github.com/patrickmn/go-cache"
 	"log"
+	"pixel/core/model"
+	"pixel/helper"
 	"strconv"
 	"strings"
 	"time"
 )
 
+// OfdRu структура
 type OfdRu struct {
 	Cache    *cache.Cache
 	Type     string
@@ -19,7 +20,8 @@ type OfdRu struct {
 	Password string
 }
 
-func (ofd *OfdRu) CheckReceipt(productName string, fd string, datePay time.Time, totalPrice int) (document model.Document, err error) {
+// CheckReceipt проверка чеков
+func (ofd *OfdRu) CheckReceipt(productName, fd string, datePay time.Time, totalPrice int) (document model.Document, err error) {
 	if receipts, ok := ofd.Cache.Get(productName); ok {
 		for _, v := range receipts.([]ofdru.Receipt) {
 			if fd == v.FD || fd == v.FP {
@@ -31,10 +33,11 @@ func (ofd *OfdRu) CheckReceipt(productName string, fd string, datePay time.Time,
 	return document, err
 }
 
+// GetReceipts получение чека
 func (ofd *OfdRu) GetReceipts(date time.Time) {
 	receipts, err := ofdru.OfdRu(ofd.Inn, ofd.Login, ofd.Password, "https://ofd.ru").GetReceipts(date)
 	if err != nil {
-		log.Printf("Ошибка получения чеков из ОФД: %s", receipts)
+		log.Printf("Ошибка получения чеков из ОФД: %v", err)
 	}
 	rCache := make(map[string][]model.Document)
 	for _, receipt := range receipts {
@@ -47,7 +50,7 @@ func (ofd *OfdRu) GetReceipts(date time.Time) {
 
 	}
 
-	for k, _ := range rCache {
+	for k := range rCache {
 		if item, ok := ofd.Cache.Get(k); ok {
 			receipts := item.([]model.Document)
 			rCache[k] = append(rCache[k], receipts...)
@@ -59,17 +62,18 @@ func (ofd *OfdRu) GetReceipts(date time.Time) {
 	log.Printf("Получено чеков: %d", len(rCache))
 }
 
+// GetName получение типа
 func (ofd *OfdRu) GetName() string {
 	return ofd.Type
 }
 
 func convertOfdruReceiptToDocument(receipt ofdru.Receipt, product ofdru.Product) model.Document {
-	date, _ := time.Parse("2016-07-26T12:32:00", receipt.Date)
+	date, _ := time.Parse("2006-01-02T15:04:05", receipt.Date)
 	fd, _ := strconv.ParseInt(receipt.FD, 10, 32)
 	return model.Document{
 		DateTime:              date.Unix(),
 		FiscalDocumentNumber:  int(fd),
-		KktRegId:              receipt.KktRegId,
+		KktRegID:              receipt.KktRegId,
 		Nds20:                 product.Vat,
 		TotalSum:              receipt.Price,
 		ProductName:           product.Name,

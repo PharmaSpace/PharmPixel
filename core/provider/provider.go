@@ -1,19 +1,22 @@
 package provider
 
 import (
-	"Pixel/core/model"
 	"github.com/patrickmn/go-cache"
+	"pixel/core/model"
 	"strings"
 	"time"
 )
 
+// Provider структура
 type Provider interface {
-	CheckReceipt(productName string, fp string, datePay time.Time, totalPrice int) (document model.Document, err error)
+	CheckReceipt(productName, fp string, datePay time.Time, totalPrice int) (document model.Document, err error)
 	GetReceipts(date time.Time)
 	GetName() string
 }
 
-func GetProvider(c *cache.Cache, provider string, credentials string) Provider {
+// TODO: Добавить валидацию конфига провайдера
+// GetProvider тип провайдера
+func GetProvider(c *cache.Cache, provider, credentials string) Provider {
 	switch provider {
 	case "ofd-ya":
 		return &Ofdya{
@@ -34,7 +37,7 @@ func GetProvider(c *cache.Cache, provider string, credentials string) Provider {
 		return &TaxCom{
 			Cache:        c,
 			Type:         provider,
-			IdIntegrator: cr[0],
+			IDIntegrator: cr[0],
 			Login:        cr[1],
 			Password:     cr[2],
 		}
@@ -68,4 +71,3 @@ func GetProvider(c *cache.Cache, provider string, credentials string) Provider {
 		panic("OFD NOT SUPPORT!!!!!")
 	}
 }
-

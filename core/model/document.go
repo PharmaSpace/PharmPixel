@@ -1,19 +1,22 @@
 package model
 
+// KKT структура кассы
 type KKT struct {
 	Address  string `json:"address"`
 	Kktregid string `json:"kktregid"`
 }
 
+// Documents структура документов
 type Documents struct {
 	Count     int        `json:"count"`
 	Documents []Document `json:"items"`
 }
 
+// Document структура документа
 type Document struct {
 	DateTime              int64  `json:"dateTime"`
 	FiscalDocumentNumber  int    `json:"fiscalDocumentNumber"`
-	KktRegId              string `json:"kktRegId"`
+	KktRegID              string `json:"kktRegId"`
 	Nds20                 int    `json:"nds20"`
 	TotalSum              int    `json:"totalSum"`
 	ProductName           string

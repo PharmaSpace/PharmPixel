@@ -1,18 +1,20 @@
 package format
 
 import (
-	"Pixel/core/model"
-	"Pixel/helper"
-	"Pixel/store"
-	"Pixel/store/service"
 	"fmt"
 	"github.com/patrickmn/go-cache"
+	"log"
+	"pixel/core/model"
+	"pixel/helper"
+	"pixel/store"
+	"pixel/store/service"
 	"strconv"
 	"strings"
 	"time"
 )
 
-type FormatInterface interface {
+// Interface описание для создания новых форматов
+type Interface interface {
 	Parse()
 	GetCache(key string) (interface{}, bool)
 	GetMP() service.MarketPlaceInterface
@@ -23,122 +25,125 @@ type FormatInterface interface {
 	GetDate() time.Time
 }
 
-func nameMatching(f FormatInterface, erpReceipts []*model.Receipt, ofdRecieptCacheItems map[string]cache.Item) ([]store.Receipt, []string) {
-	checkOfdProductNames := make([]string, 0)
-	receipts := make([]store.Receipt, 0)
+func nameMatching(f Interface, erpReceipts []*model.Receipt, ofdReceiptCacheItems map[string]cache.Item) (receipts []store.Receipt, checkOfdProductNames []string) {
 	// проходимся по чекам ОФД из кеша
-	for cacheId, _ := range ofdRecieptCacheItems {
-		if cacheItem, ok := f.GetCache(cacheId); ok {
-			if documentList, ok := cacheItem.([]model.Document); ok {
-				for _, document := range documentList {
-					// ищим матчинг по названию товара
-					text := helper.Cut(strings.ToLower(document.ProductName), 32)
-					if cacheItem, ok := f.GetOFDCache(text); ok {
-						if matchItemList, ok := cacheItem.([]service.MatchProductItem); ok {
-							// находим матчинг разрешающий выгрузку
-							matchItem := service.MatchProductItem{}
-							for _, val := range matchItemList {
-								if val.Export && len(val.ID) > 0 {
-									matchItem = val
-									break
-								}
+	for _, cacheItem := range ofdReceiptCacheItems {
+		if documentList, ok := cacheItem.Object.([]model.Document); ok {
+			for _, document := range documentList {
+				// ищим матчинг по названию товара
+				text := helper.Cut(strings.ToLower(document.ProductName), 32)
+				if cacheItem, ok := f.GetOFDCache(text); ok {
+					if matchItemList, ok := cacheItem.([]service.MatchProductItem); ok {
+						// находим матчинг разрешающий выгрузку
+						matchItem := service.MatchProductItem{}
+						for _, val := range matchItemList {
+							if val.Export && len(val.ID) > 0 {
+								matchItem = val
+								break
 							}
-							if len(matchItem.ID) == 0 {
-								continue
+						}
+						if matchItem.ID == "" {
+							continue
+						}
+
+						var erpReceipt *model.Receipt
+						// ищем совпадения чеков из OFD с ERP
+						for _, erpReceiptItem := range erpReceipts {
+							var isFound bool
+							if len(erpReceiptItem.InvoiceNumber) > 0 {
+								// если InvoiceNumber не пустой то ищем совпадение по FiscalDocumentNumber
+								isFound = erpReceiptItem.InvoiceNumber == fmt.Sprint(document.FiscalDocumentNumber) ||
+									erpReceiptItem.InvoiceNumber == document.FiscalDocumentNumber2 ||
+									erpReceiptItem.InvoiceNumber == document.FiscalDocumentNumber3
+							} else {
+								// в противном случае по сумме чека
+								tp, _ := strconv.ParseInt(erpReceiptItem.TotalPrice, 10, 32)
+								isFound = int(tp) == document.TotalSum
 							}
 
-							var erpReciept *model.Receipt
-							// ищем совпадения чеков из OFD с ERP
-							for _, erpReceiptItem := range erpReceipts {
-								var isFound = false
-								if len(erpReceiptItem.InvoiceNumber) > 0 {
-									// если InvoiceNumber не пустой то ищем совпадение по FiscalDocumentNumber
-									isFound = erpReceiptItem.InvoiceNumber == fmt.Sprint(document.FiscalDocumentNumber) ||
-										erpReceiptItem.InvoiceNumber == document.FiscalDocumentNumber2 ||
-										erpReceiptItem.InvoiceNumber == document.FiscalDocumentNumber3
-								} else {
-									// в противном случае по сумме чека
-									tp, _ := strconv.ParseInt(erpReceiptItem.TotalPrice, 10, 32)
-									isFound = int(tp) == document.TotalSum
-								}
-
-								// проходимся по матчингу - ищем соответсвие по названию
-								if isFound {
-									isFound = false
-									for _, val := range matchItemList {
-										if val.Export && len(val.ID) > 0 {
-											if strings.ReplaceAll(strings.ToLower(erpReceiptItem.Name), "№", "n") == strings.ToLower(val.Name) ||
-												helper.Cut(strings.ReplaceAll(strings.ToLower(erpReceiptItem.Name), "№", "n"), 32) == cut(strings.ToLower(val.Name), 32) {
-												matchItem = val
-												isFound = true
-												break
-											}
+							// проходимся по матчингу - ищем соответсвие по названию
+							if isFound {
+								isFound = false
+								for _, val := range matchItemList {
+									if val.Export && len(val.ID) > 0 {
+										erpName := strings.ReplaceAll(strings.ToLower(erpReceiptItem.Name), "№", "n")
+										if strings.EqualFold(erpName, val.Name) ||
+											strings.EqualFold(helper.Cut(erpName, 32), helper.Cut(val.Name, 32)) {
+											matchItem = val
+											isFound = true
+											break
 										}
 									}
 								}
-
-								if isFound {
-									erpReciept = erpReceiptItem
-									break
-								}
 							}
 
-							dateR := time.Unix(document.DateTime, 0)
-
-							rc := store.Receipt{
-								DateTime:             dateR.Format(time.RFC3339Nano),
-								FiscalDocumentNumber: document.FiscalDocumentNumber,
-								KktRegId:             document.KktRegId,
-								Link:                 document.Link,
-								Name:                 document.ProductName,
-								Ofd:                  document.Ofd,
-								Price:                document.ProductPrice,
-								PriceSellIn:          document.Nds20,
-								ProductId: matchItem.ID,
-								Quantity:  fmt.Sprint(document.ProductQuantity),
-								CreatedAt: time.Now().Format(time.RFC3339Nano),
-								UpdatedAt: time.Now().Format(time.RFC3339Nano),
-								TotalSum:  document.TotalSum,
+							if isFound {
+								erpReceipt = erpReceiptItem
+								break
 							}
-
-							if erpReciept != nil {
-								rc.IsValidated = true
-								pointName := strings.Split(erpReciept.PharmacyID, ",")
-								rc.PointName = pointName[0]
-								rc.SupplerName = erpReciept.Supplier
-								rc.SupplerInn = erpReciept.SupplierINN
-								rc.Series = erpReciept.Series
-
-							}
-
-							receipts = append(receipts, rc)
-						}
-					} else {
-						if !helper.ContainsString(checkOfdProductNames, strings.TrimSpace(document.ProductName)) {
-							checkOfdProductNames = append(checkOfdProductNames, strings.TrimSpace(document.ProductName))
 						}
 
+						dateR := time.Unix(document.DateTime, 0)
+						//TODO: Подумать что можно сделать с этим безумным нэймингом полей
+						rc := store.Receipt{
+							DateTime:             dateR.Format(time.RFC3339Nano),
+							FiscalDocumentNumber: document.FiscalDocumentNumber,
+							KktRegID:             document.KktRegID,
+							Link:                 document.Link,
+							Name:                 document.ProductName,
+							Ofd:                  document.Ofd,
+							Price:                document.ProductPrice,
+							PriceSellIn:          document.Nds20,
+							ProductID:            matchItem.ID,
+							Quantity:             fmt.Sprint(document.ProductQuantity),
+							CreatedAt:            time.Now().Format(time.RFC3339Nano),
+							UpdatedAt:            time.Now().Format(time.RFC3339Nano),
+							TotalSum:             document.TotalSum,
+							Total:                document.ProductTotalPrice,
+						}
+
+						if erpReceipt != nil {
+							rc.IsValidated = true
+							pointName := strings.Split(erpReceipt.PharmacyID, ",")
+							rc.PointName = pointName[0]
+							rc.SupplerName = erpReceipt.Supplier
+							rc.SupplerInn = erpReceipt.SupplierINN
+							rc.Series = erpReceipt.Series
+						}
+
+						receipts = append(receipts, rc)
 					}
-				}
+				} else {
+					if !helper.ContainsString(checkOfdProductNames, strings.TrimSpace(document.ProductName)) {
+						checkOfdProductNames = append(checkOfdProductNames, strings.TrimSpace(document.ProductName))
+					}
 
+				}
 			}
+
 		}
 	}
 	return receipts, checkOfdProductNames
 
 }
 
+// OfdProductsForMatching подготовка продуктов к отправке в МП
 func OfdProductsForMatching(ofdProductNames []string) []service.Product {
-	var products []service.Product
+	products := make([]service.Product, 0, len(ofdProductNames))
 	for _, name := range ofdProductNames {
 		products = append(products, service.Product{
-			Name: strings.ToLower(name),
+			Name:      strings.ToLower(name),
+			CreatedAt: time.Now().Format(time.RFC3339Nano),
 		})
 	}
 	return products
 }
-func ErpProductsForMatching(f FormatInterface, erpProducts []service.Product) []service.Product {
-	var checkErpProducts []service.Product
+
+// ErpProductsForMatching подготовка продуктов к отправке в МП
+func ErpProductsForMatching(f Interface, erpProducts []service.Product) []service.Product {
+	var (
+		checkErpProducts []service.Product
+	)
 	// проходимся по товарам из ЕРП - определяем какие нужно по новой сматчить
 	for _, erpProduct := range erpProducts {
 		needCheck := checkProduct(f, erpProduct)
@@ -147,31 +152,32 @@ func ErpProductsForMatching(f FormatInterface, erpProducts []service.Product) []
 			checkErpProducts = append(checkErpProducts, erpProduct)
 		}
 	}
-	var products []service.Product
+	products := make([]service.Product, 0, len(checkErpProducts))
 	for _, erpProduct := range checkErpProducts {
 		productName := strings.Replace(erpProduct.Name, "№", "N", -1)
-		products = append(products, service.Product{
-			Name:          strings.ToLower(productName),
-			Manufacturer:  erpProduct.Manufacturer,
-			PartNumber:    erpProduct.PartNumber,
-			Serial:        erpProduct.Serial,
-			Stock:         erpProduct.Stock,
-			WarehouseName: erpProduct.WarehouseName,
-			SupplerName:   erpProduct.SupplerName,
-			SupplerInn:    erpProduct.SupplerInn,
-		})
+		var product service.Product
+		product.Name = strings.ToLower(productName)
+		product.Manufacturer = erpProduct.Manufacturer
+		product.PartNumber = erpProduct.PartNumber
+		product.Serial = erpProduct.Serial
+		product.Stock = erpProduct.Stock
+		product.WarehouseName = erpProduct.WarehouseName
+		product.SupplerName = erpProduct.SupplerName
+		product.SupplerInn = erpProduct.SupplerInn
+		product.CreatedAt = erpProduct.CreatedAt
+		products = append(products, product)
 	}
 	return products
 }
 
-func checkProduct(f FormatInterface, erpProduct service.Product) bool {
+func checkProduct(f Interface, erpProduct service.Product) bool {
 	needCheck := true
 	productName := strings.Replace(erpProduct.Name, "№", "N", -1)
 	if cacheItem, ok := f.GetERPCache(strings.ToLower(productName)); ok {
 		if matchItemList, ok := cacheItem.([]service.MatchProductItem); ok {
 			for _, matchItem := range matchItemList {
 				// если название, ИНН поставщика, остатки - совпадают, то матчит по новой не нужно
-				if strings.ToLower(matchItem.Name) == strings.ToLower(erpProduct.Name) && matchItem.SupplierInn == erpProduct.SupplerInn && matchItem.Stock == erpProduct.Stock {
+				if strings.EqualFold(matchItem.Name, erpProduct.Name) && matchItem.SupplierInn == erpProduct.SupplerInn && matchItem.Stock == erpProduct.Stock {
 					needCheck = false
 					break
 				}
@@ -181,14 +187,17 @@ func checkProduct(f FormatInterface, erpProduct service.Product) bool {
 	return needCheck
 }
 
-func getMatchProducts(f FormatInterface) {
+func getMatchProducts(f Interface) {
 	getMatchFromSystem(f, true, false)
 	getMatchFromSystem(f, false, true)
 }
 
-func getMatchFromSystem(f FormatInterface, isOfd, isErp bool) {
+func getMatchFromSystem(f Interface, isOfd, isErp bool) {
 	filterDate := f.GetDate().Format("02.01.2006")
-	matchProducts := f.GetMP().GetMatchProducts(filterDate, isOfd, isErp)
+	matchProducts, err := f.GetMP().GetMatchProducts(filterDate, isOfd, isErp)
+	if err != nil {
+		log.Printf("[ERROR] Ошибка получения продуктов %v", err)
+	}
 	if len(matchProducts.Data) > 0 {
 		cacheItemsByName := make(map[string][]service.MatchProductItem)
 		for _, matchItem := range matchProducts.Data {
@@ -196,19 +205,11 @@ func getMatchFromSystem(f FormatInterface, isOfd, isErp bool) {
 		}
 		for key, val := range cacheItemsByName {
 			if isOfd {
-				f.SetOFDCache(strings.ToLower(key), val, 12*time.Hour)
+				f.SetOFDCache(helper.Cut(key, 32), val, 12*time.Hour)
 			}
 			if isErp {
-				f.SetERPCache(strings.ToLower(key), val, 12*time.Hour)
+				f.SetERPCache(helper.Cut(key, 32), val, 12*time.Hour)
 			}
 		}
 	}
-}
-
-func cut(text string, limit int) string {
-	runes := []rune(text)
-	if len(runes) >= limit {
-		return string(runes[:limit])
-	}
-	return text
 }

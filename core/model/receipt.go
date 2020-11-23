@@ -1,5 +1,6 @@
 package model
 
+// Receipt структура чека
 type Receipt struct {
 	PharmacyID      string
 	PharmacyAddress string
@@ -18,4 +19,3 @@ type Receipt struct {
 	ShipmentNumber  string
 	Series          string
 }
-
