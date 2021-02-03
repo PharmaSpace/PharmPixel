@@ -6,14 +6,16 @@ import (
 	"log"
 	"pixel/core/model"
 	"pixel/helper"
+	"pixel/sentry"
 	"time"
 )
 
 // Ofdya структра
 type Ofdya struct {
-	Cache *cache.Cache
-	Type  string
-	Token string
+	Cache  *cache.Cache
+	Type   string
+	Token  string
+	Sentry *sentry.Sentry
 }
 
 // CheckReceipt проверка чека
@@ -32,7 +34,10 @@ func (ofd *Ofdya) CheckReceipt(productName, fd string, datePay time.Time, totalP
 // GetReceipts получение чека
 func (ofd *Ofdya) GetReceipts(date time.Time) {
 	pOfd := OfdYa.OfdYa(ofd.Token)
-	receipts, _ := pOfd.GetReceipts(date)
+	receipts, err := pOfd.GetReceipts(date)
+	if err != nil {
+		ofd.Sentry.Error(err)
+	}
 
 	rCache := make(map[string][]OfdYa.Receipt)
 	for _, v := range receipts {

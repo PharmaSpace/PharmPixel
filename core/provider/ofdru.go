@@ -6,6 +6,7 @@ import (
 	"log"
 	"pixel/core/model"
 	"pixel/helper"
+	"pixel/sentry"
 	"strconv"
 	"strings"
 	"time"
@@ -18,6 +19,7 @@ type OfdRu struct {
 	Inn      string
 	Login    string
 	Password string
+	Sentry   *sentry.Sentry
 }
 
 // CheckReceipt проверка чеков
@@ -37,7 +39,7 @@ func (ofd *OfdRu) CheckReceipt(productName, fd string, datePay time.Time, totalP
 func (ofd *OfdRu) GetReceipts(date time.Time) {
 	receipts, err := ofdru.OfdRu(ofd.Inn, ofd.Login, ofd.Password, "https://ofd.ru").GetReceipts(date)
 	if err != nil {
-		log.Printf("Ошибка получения чеков из ОФД: %v", err)
+		ofd.Sentry.Error(err)
 	}
 	rCache := make(map[string][]model.Document)
 	for _, receipt := range receipts {

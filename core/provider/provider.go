@@ -3,6 +3,7 @@ package provider
 import (
 	"github.com/patrickmn/go-cache"
 	"pixel/core/model"
+	"pixel/sentry"
 	"strings"
 	"time"
 )
@@ -16,13 +17,14 @@ type Provider interface {
 
 // TODO: Добавить валидацию конфига провайдера
 // GetProvider тип провайдера
-func GetProvider(c *cache.Cache, provider, credentials string) Provider {
+func GetProvider(c *cache.Cache, provider, credentials string, sentry *sentry.Sentry) Provider {
 	switch provider {
 	case "ofd-ya":
 		return &Ofdya{
-			Cache: c,
-			Type:  provider,
-			Token: credentials,
+			Cache:  c,
+			Type:   provider,
+			Token:  credentials,
+			Sentry: sentry,
 		}
 	case "1ofd":
 		cr := strings.Split(credentials, ":")
@@ -31,6 +33,7 @@ func GetProvider(c *cache.Cache, provider, credentials string) Provider {
 			Type:     provider,
 			Login:    cr[0],
 			Password: cr[1],
+			Sentry:   sentry,
 		}
 	case "taxcom":
 		cr := strings.Split(credentials, ":")
@@ -40,6 +43,7 @@ func GetProvider(c *cache.Cache, provider, credentials string) Provider {
 			IDIntegrator: cr[0],
 			Login:        cr[1],
 			Password:     cr[2],
+			Sentry:       sentry,
 		}
 	case "platformofd":
 		cr := strings.Split(credentials, ":")
@@ -48,6 +52,7 @@ func GetProvider(c *cache.Cache, provider, credentials string) Provider {
 			Type:     provider,
 			Login:    cr[0],
 			Password: cr[1],
+			Sentry:   sentry,
 		}
 	case "ofdru":
 		cr := strings.Split(credentials, ":")
@@ -57,6 +62,7 @@ func GetProvider(c *cache.Cache, provider, credentials string) Provider {
 			Inn:      cr[0],
 			Login:    cr[1],
 			Password: cr[2],
+			Sentry:   sentry,
 		}
 	case "sbis":
 		cr := strings.Split(credentials, ":")
@@ -66,6 +72,7 @@ func GetProvider(c *cache.Cache, provider, credentials string) Provider {
 			Inn:      cr[0],
 			Login:    cr[1],
 			Password: cr[2],
+			Sentry:   sentry,
 		}
 	default:
 		panic("OFD NOT SUPPORT!!!!!")

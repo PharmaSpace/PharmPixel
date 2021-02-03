@@ -6,6 +6,7 @@ import (
 	"github.com/patrickmn/go-cache"
 	"pixel/core/model"
 	"pixel/helper"
+	"pixel/sentry"
 	"strconv"
 	"time"
 )
@@ -17,6 +18,7 @@ type TaxCom struct {
 	Login        string
 	Password     string
 	IDIntegrator string
+	Sentry       *sentry.Sentry
 }
 
 // CheckReceipt  проверка чека
@@ -36,7 +38,11 @@ func (ofd *TaxCom) CheckReceipt(productName, fd string, datePay time.Time, total
 func (ofd *TaxCom) GetReceipts(date time.Time) {
 	accountList := taxcom.Taxcom(ofd.Login, ofd.Password, ofd.IDIntegrator, "").GetAccountList()
 	for _, account := range accountList {
-		receipts, _ := taxcom.Taxcom(ofd.Login, ofd.Password, ofd.IDIntegrator, account).GetReceipts(date)
+		receipts, err := taxcom.Taxcom(ofd.Login, ofd.Password, ofd.IDIntegrator, account).GetReceipts(date)
+		if err != nil {
+			ofd.Sentry.Error(err)
+		}
+
 		rCache := make(map[string][]model.Document)
 		for _, v := range receipts {
 			for _, pr := range v.Products {

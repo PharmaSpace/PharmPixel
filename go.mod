@@ -14,12 +14,12 @@ require (
 	github.com/antchfx/htmlquery v1.2.3 // indirect
 	github.com/antchfx/xmlquery v1.3.0 // indirect
 	github.com/denisenkom/go-mssqldb v0.0.0-20200620013148-b91950f658ec
+	github.com/getsentry/sentry-go v0.9.0
 	github.com/go-ole/go-ole v1.2.4 // indirect
 	github.com/go-resty/resty/v2 v2.3.0
 	github.com/golang/protobuf v1.4.2 // indirect
 	github.com/google/logger v1.1.0 // indirect
 	github.com/joho/godotenv v1.3.0
-	github.com/jszwec/csvutil v1.4.0
 	github.com/juju/fslock v0.0.0-20160525022230-4d5c94c67b4b
 	github.com/kardianos/service v1.1.0
 	github.com/mailru/easyjson v0.7.6

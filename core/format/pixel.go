@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"pixel/config"
 	"pixel/core/model"
+	"pixel/sentry"
 	"pixel/store/service"
 	"regexp"
 	"strconv"
@@ -29,6 +30,7 @@ type Pixel struct {
 	matchingOfdCache *cache.Cache
 	matchingErpCache *cache.Cache
 	cache            *cache.Cache
+	sentry           *sentry.Sentry
 }
 
 // GetCache получение кеша по ключу
@@ -82,19 +84,22 @@ func (p *Pixel) GetDate() time.Time {
 }
 
 // NewPixel формат Пикселя
-func NewPixel(cf *config.Config, mp service.MarketPlaceInterface, ch *cache.Cache, l serviceLib.Logger, date time.Time) *Pixel {
+func NewPixel(cf *config.Config, mp service.MarketPlaceInterface, ch *cache.Cache, l serviceLib.Logger, date time.Time, sentry *sentry.Sentry) *Pixel {
 	matchingOfdCache := cache.New(5*time.Minute, 10*time.Minute)
 	matchingErpCache := cache.New(5*time.Minute, 10*time.Minute)
 
-	return &Pixel{Config: cf, cache: ch, MP: mp, Log: l, matchingErpCache: matchingErpCache, matchingOfdCache: matchingOfdCache, date: date}
+	return &Pixel{Config: cf, cache: ch, MP: mp, Log: l, matchingErpCache: matchingErpCache, matchingOfdCache: matchingOfdCache, date: date, sentry: sentry}
 }
 
 // Parse парсинг
 func (p *Pixel) Parse() {
 	p.matchingErpCache.Flush()
 	p.matchingOfdCache.Flush()
-	getMatchProducts(p)
 	var err error
+	err = getMatchProducts(p)
+	if err != nil {
+		p.sentry.Error(err)
+	}
 
 	// данные из кеша по чекам из ОФД
 	ofdRecieptCacheItems := p.cache.Items()
@@ -105,6 +110,7 @@ func (p *Pixel) Parse() {
 	if len(receipts) > 0 {
 		err = p.MP.SendReceipt(receipts)
 		if err != nil {
+			p.sentry.Error(err)
 			log.Printf("[ERROR] Ошикбка отправкии чеков")
 		}
 	}
@@ -114,6 +120,7 @@ func (p *Pixel) Parse() {
 		productsForMatching := OfdProductsForMatching(checkOfdProductNames)
 		err = p.MP.SendOfdProducts(productsForMatching, true, false)
 		if err != nil {
+			p.sentry.Error(err)
 			log.Printf("[ERROR] Ошикбка отправкии продуктов")
 		}
 	}
@@ -121,6 +128,7 @@ func (p *Pixel) Parse() {
 	productsForMatching := ErpProductsForMatching(p, p.convertProducts(erpProducts))
 	err = p.MP.SendOfdProducts(productsForMatching, false, true)
 	if err != nil {
+		p.sentry.Error(err)
 		log.Printf("[ERROR] Ошикбка отправкии продуктов")
 	}
 }
@@ -140,6 +148,7 @@ func (p *Pixel) getFiles() (receipts []*model.Receipt, products []*model.Product
 				if p.Config.Files.BackupFolder != "" {
 					err := os.Rename(fmt.Sprintf("%s/%s", p.Config.Files.SourceFolder, file.Name()), fmt.Sprintf("%s/%s", p.Config.Files.BackupFolder, file.Name()))
 					if err != nil {
+						p.sentry.Error(err)
 						log.Fatal(err)
 					}
 				}
@@ -163,6 +172,7 @@ func (p *Pixel) parseFiles() ([]*model.Receipt, []*model.Product) {
 			if err := os.Remove(filePath); err != nil {
 				err = p.Log.Errorf("%v", err)
 				if err != nil {
+					p.sentry.Error(err)
 					log.Printf("[ERROR] Ошибка удаления файла продуктов%v", err)
 				}
 			}
@@ -173,6 +183,7 @@ func (p *Pixel) parseFiles() ([]*model.Receipt, []*model.Product) {
 			if err := os.Remove(filePath); err != nil {
 				err = p.Log.Errorf("%v", err)
 				if err != nil {
+					p.sentry.Error(err)
 					log.Printf("[ERROR] Ошибка удаления файла чеков %v", err)
 				}
 			}
@@ -241,6 +252,7 @@ func (p *Pixel) parsingProductFile(file string) (products []*model.Product) {
 		record[9] = strings.Replace(record[9], ",", ".", -1)
 		quantity, err := strconv.ParseFloat(record[9], 64)
 		if err != nil {
+			p.sentry.Error(err)
 			err = p.Log.Errorf("convert quantity string to float64: %v", err)
 			if err != nil {
 				log.Printf("convert quantity string to float64: %v", err)
@@ -267,6 +279,7 @@ func (p *Pixel) parsingProductFile(file string) (products []*model.Product) {
 func (p *Pixel) convertCsvToStruct(file string, l int) (outRecord [][]string, err error) {
 	readFile, err := ioutil.ReadFile(filepath.Clean(file))
 	if err != nil {
+		p.sentry.Error(err)
 		err = p.Log.Errorf("Error read file: %v", err)
 		if err != nil {
 			log.Printf("Error read file: %v", err)
@@ -275,12 +288,16 @@ func (p *Pixel) convertCsvToStruct(file string, l int) (outRecord [][]string, er
 	sourceFile := string(readFile)
 	sourceFile = strings.ReplaceAll(sourceFile, "\r", "")
 	// лайфхак для лидерфармы
-	sourceFile = strings.ReplaceAll(sourceFile, "\",\"", ";")
-	sourceFile = strings.ReplaceAll(sourceFile, "\"", "")
+	if config.Cfg.PixelOptions.CSVType == "lider" {
+		sourceFile = strings.ReplaceAll(sourceFile, "\",\"", ";")
+		sourceFile = strings.ReplaceAll(sourceFile, "\"", "")
+	}
 
 	fileIO := strings.NewReader(sourceFile)
 	r := csv.NewReader(fileIO)
-	r.Comma = ';'
+	if config.Cfg.PixelOptions.CSVType == "lider" {
+		r.Comma = ';'
+	}
 	r.LazyQuotes = true
 	r.FieldsPerRecord = -1
 	records, err := r.ReadAll()
@@ -290,6 +307,7 @@ func (p *Pixel) convertCsvToStruct(file string, l int) (outRecord [][]string, er
 			continue
 		}
 		if lenRecord < l {
+			p.sentry.Error(fmt.Errorf("%s: не совпадает количество значений в строке. Ожидаемое количество: %v Пришло: %v Строка: %v", file, l, lenRecord, i))
 			err = p.Log.Errorf("%s: не совпадает количество значений в строке. Ожидаемое количество: %v Пришло: %v Строка: %v", file, l, lenRecord, i)
 			if err != nil {
 				log.Printf("%s: не совпадает количество значений в строке. Ожидаемое количество: %v Пришло: %v Строка: %v", file, l, lenRecord, i)
@@ -304,6 +322,7 @@ func (p *Pixel) convertCsvToStruct(file string, l int) (outRecord [][]string, er
 func (p *Pixel) readDir(dir string) (files []os.FileInfo) {
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
+		p.sentry.Error(err)
 		err = p.Log.Errorf("[ERR] Ошибка чтения директории %s| %v", dir, err)
 		if err != nil {
 			log.Printf("[ERR] Ошибка чтения директории %s| %v", dir, err)
@@ -318,6 +337,7 @@ func (p *Pixel) unzip(fileName, targetDir string) {
 
 		zippedFile, err := file.Open()
 		if err != nil {
+			p.sentry.Error(err)
 			err = p.Log.Errorf("[ERR] Ошибка чтения файла | %v", err)
 			if err != nil {
 				log.Printf("[ERR] Ошибка чтения файла | %v", err)
@@ -336,6 +356,7 @@ func (p *Pixel) unzip(fileName, targetDir string) {
 		if file.FileInfo().IsDir() {
 			err = os.MkdirAll(extractedFilePath, file.Mode())
 			if err != nil {
+				p.sentry.Error(err)
 				log.Printf("[ERR] Ошибка оздания файлов | %v", err)
 				return
 			}
@@ -346,6 +367,7 @@ func (p *Pixel) unzip(fileName, targetDir string) {
 				file.Mode(),
 			)
 			if err != nil {
+				p.sentry.Error(err)
 				err = p.Log.Errorf("[ERR] Ошибка распаковки файла | %v", err)
 				if err != nil {
 					log.Printf("[ERR] Ошибка распаковки файла | %v", err)
@@ -354,12 +376,15 @@ func (p *Pixel) unzip(fileName, targetDir string) {
 			// #nosec G110
 			_, err = io.Copy(outputFile, zippedFile)
 			if err != nil {
+				p.sentry.Error(err)
 				err = p.Log.Errorf("[ERR] Ошибка копирование содержимого архива | %v", err)
 				if err != nil {
 					log.Printf("[ERR] Ошибка копирование содержимого архива | %v", err)
 				}
 			}
+			outputFile.Close()
 		}
+
 	}
 	defer zipReader.Close()
 }

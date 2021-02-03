@@ -17,80 +17,7 @@ var (
 	_ easyjson.Marshaler
 )
 
-func easyjsonB499ec80DecodePixelStoreService(in *jlexer.Lexer, out *UniFarm) {
-	isTopLevel := in.IsStart()
-	if in.IsNull() {
-		if isTopLevel {
-			in.Consumed()
-		}
-		in.Skip()
-		return
-	}
-	in.Delim('{')
-	for !in.IsDelim('}') {
-		key := in.UnsafeFieldName(false)
-		in.WantColon()
-		if in.IsNull() {
-			in.Skip()
-			in.WantComma()
-			continue
-		}
-		switch key {
-		case "Username":
-			out.Username = string(in.String())
-		case "Password":
-			out.Password = string(in.String())
-		default:
-			in.SkipRecursive()
-		}
-		in.WantComma()
-	}
-	in.Delim('}')
-	if isTopLevel {
-		in.Consumed()
-	}
-}
-func easyjsonB499ec80EncodePixelStoreService(out *jwriter.Writer, in UniFarm) {
-	out.RawByte('{')
-	first := true
-	_ = first
-	{
-		const prefix string = ",\"Username\":"
-		out.RawString(prefix[1:])
-		out.String(string(in.Username))
-	}
-	{
-		const prefix string = ",\"Password\":"
-		out.RawString(prefix)
-		out.String(string(in.Password))
-	}
-	out.RawByte('}')
-}
-
-// MarshalJSON supports json.Marshaler interface
-func (v UniFarm) MarshalJSON() ([]byte, error) {
-	w := jwriter.Writer{}
-	easyjsonB499ec80EncodePixelStoreService(&w, v)
-	return w.Buffer.BuildBytes(), w.Error
-}
-
-// MarshalEasyJSON supports easyjson.Marshaler interface
-func (v UniFarm) MarshalEasyJSON(w *jwriter.Writer) {
-	easyjsonB499ec80EncodePixelStoreService(w, v)
-}
-
-// UnmarshalJSON supports json.Unmarshaler interface
-func (v *UniFarm) UnmarshalJSON(data []byte) error {
-	r := jlexer.Lexer{Data: data}
-	easyjsonB499ec80DecodePixelStoreService(&r, v)
-	return r.Error()
-}
-
-// UnmarshalEasyJSON supports easyjson.Unmarshaler interface
-func (v *UniFarm) UnmarshalEasyJSON(l *jlexer.Lexer) {
-	easyjsonB499ec80DecodePixelStoreService(l, v)
-}
-func easyjsonB499ec80DecodePixelStoreService1(in *jlexer.Lexer, out *UniFarmReceiptResponse) {
+func easyjsonB499ec80DecodePixelStoreService(in *jlexer.Lexer, out *UniFarmReceiptResponse) {
 	isTopLevel := in.IsStart()
 	if in.IsNull() {
 		if isTopLevel {
@@ -121,7 +48,7 @@ func easyjsonB499ec80DecodePixelStoreService1(in *jlexer.Lexer, out *UniFarmRece
 		in.Consumed()
 	}
 }
-func easyjsonB499ec80EncodePixelStoreService1(out *jwriter.Writer, in UniFarmReceiptResponse) {
+func easyjsonB499ec80EncodePixelStoreService(out *jwriter.Writer, in UniFarmReceiptResponse) {
 	out.RawByte('{')
 	first := true
 	_ = first
@@ -136,27 +63,27 @@ func easyjsonB499ec80EncodePixelStoreService1(out *jwriter.Writer, in UniFarmRec
 // MarshalJSON supports json.Marshaler interface
 func (v UniFarmReceiptResponse) MarshalJSON() ([]byte, error) {
 	w := jwriter.Writer{}
-	easyjsonB499ec80EncodePixelStoreService1(&w, v)
+	easyjsonB499ec80EncodePixelStoreService(&w, v)
 	return w.Buffer.BuildBytes(), w.Error
 }
 
 // MarshalEasyJSON supports easyjson.Marshaler interface
 func (v UniFarmReceiptResponse) MarshalEasyJSON(w *jwriter.Writer) {
-	easyjsonB499ec80EncodePixelStoreService1(w, v)
+	easyjsonB499ec80EncodePixelStoreService(w, v)
 }
 
 // UnmarshalJSON supports json.Unmarshaler interface
 func (v *UniFarmReceiptResponse) UnmarshalJSON(data []byte) error {
 	r := jlexer.Lexer{Data: data}
-	easyjsonB499ec80DecodePixelStoreService1(&r, v)
+	easyjsonB499ec80DecodePixelStoreService(&r, v)
 	return r.Error()
 }
 
 // UnmarshalEasyJSON supports easyjson.Unmarshaler interface
 func (v *UniFarmReceiptResponse) UnmarshalEasyJSON(l *jlexer.Lexer) {
-	easyjsonB499ec80DecodePixelStoreService1(l, v)
+	easyjsonB499ec80DecodePixelStoreService(l, v)
 }
-func easyjsonB499ec80DecodePixelStoreService2(in *jlexer.Lexer, out *UniFarmReceipt) {
+func easyjsonB499ec80DecodePixelStoreService1(in *jlexer.Lexer, out *UniFarmReceipt) {
 	isTopLevel := in.IsStart()
 	if in.IsNull() {
 		if isTopLevel {
@@ -231,7 +158,7 @@ func easyjsonB499ec80DecodePixelStoreService2(in *jlexer.Lexer, out *UniFarmRece
 		in.Consumed()
 	}
 }
-func easyjsonB499ec80EncodePixelStoreService2(out *jwriter.Writer, in UniFarmReceipt) {
+func easyjsonB499ec80EncodePixelStoreService1(out *jwriter.Writer, in UniFarmReceipt) {
 	out.RawByte('{')
 	first := true
 	_ = first
@@ -356,27 +283,27 @@ func easyjsonB499ec80EncodePixelStoreService2(out *jwriter.Writer, in UniFarmRec
 // MarshalJSON supports json.Marshaler interface
 func (v UniFarmReceipt) MarshalJSON() ([]byte, error) {
 	w := jwriter.Writer{}
-	easyjsonB499ec80EncodePixelStoreService2(&w, v)
+	easyjsonB499ec80EncodePixelStoreService1(&w, v)
 	return w.Buffer.BuildBytes(), w.Error
 }
 
 // MarshalEasyJSON supports easyjson.Marshaler interface
 func (v UniFarmReceipt) MarshalEasyJSON(w *jwriter.Writer) {
-	easyjsonB499ec80EncodePixelStoreService2(w, v)
+	easyjsonB499ec80EncodePixelStoreService1(w, v)
 }
 
 // UnmarshalJSON supports json.Unmarshaler interface
 func (v *UniFarmReceipt) UnmarshalJSON(data []byte) error {
 	r := jlexer.Lexer{Data: data}
-	easyjsonB499ec80DecodePixelStoreService2(&r, v)
+	easyjsonB499ec80DecodePixelStoreService1(&r, v)
 	return r.Error()
 }
 
 // UnmarshalEasyJSON supports easyjson.Unmarshaler interface
 func (v *UniFarmReceipt) UnmarshalEasyJSON(l *jlexer.Lexer) {
-	easyjsonB499ec80DecodePixelStoreService2(l, v)
+	easyjsonB499ec80DecodePixelStoreService1(l, v)
 }
-func easyjsonB499ec80DecodePixelStoreService3(in *jlexer.Lexer, out *UniFarmProductResponse) {
+func easyjsonB499ec80DecodePixelStoreService2(in *jlexer.Lexer, out *UniFarmProductResponse) {
 	isTopLevel := in.IsStart()
 	if in.IsNull() {
 		if isTopLevel {
@@ -407,7 +334,7 @@ func easyjsonB499ec80DecodePixelStoreService3(in *jlexer.Lexer, out *UniFarmProd
 		in.Consumed()
 	}
 }
-func easyjsonB499ec80EncodePixelStoreService3(out *jwriter.Writer, in UniFarmProductResponse) {
+func easyjsonB499ec80EncodePixelStoreService2(out *jwriter.Writer, in UniFarmProductResponse) {
 	out.RawByte('{')
 	first := true
 	_ = first
@@ -422,27 +349,27 @@ func easyjsonB499ec80EncodePixelStoreService3(out *jwriter.Writer, in UniFarmPro
 // MarshalJSON supports json.Marshaler interface
 func (v UniFarmProductResponse) MarshalJSON() ([]byte, error) {
 	w := jwriter.Writer{}
-	easyjsonB499ec80EncodePixelStoreService3(&w, v)
+	easyjsonB499ec80EncodePixelStoreService2(&w, v)
 	return w.Buffer.BuildBytes(), w.Error
 }
 
 // MarshalEasyJSON supports easyjson.Marshaler interface
 func (v UniFarmProductResponse) MarshalEasyJSON(w *jwriter.Writer) {
-	easyjsonB499ec80EncodePixelStoreService3(w, v)
+	easyjsonB499ec80EncodePixelStoreService2(w, v)
 }
 
 // UnmarshalJSON supports json.Unmarshaler interface
 func (v *UniFarmProductResponse) UnmarshalJSON(data []byte) error {
 	r := jlexer.Lexer{Data: data}
-	easyjsonB499ec80DecodePixelStoreService3(&r, v)
+	easyjsonB499ec80DecodePixelStoreService2(&r, v)
 	return r.Error()
 }
 
 // UnmarshalEasyJSON supports easyjson.Unmarshaler interface
 func (v *UniFarmProductResponse) UnmarshalEasyJSON(l *jlexer.Lexer) {
-	easyjsonB499ec80DecodePixelStoreService3(l, v)
+	easyjsonB499ec80DecodePixelStoreService2(l, v)
 }
-func easyjsonB499ec80DecodePixelStoreService4(in *jlexer.Lexer, out *UniFarmProduct) {
+func easyjsonB499ec80DecodePixelStoreService3(in *jlexer.Lexer, out *UniFarmProduct) {
 	isTopLevel := in.IsStart()
 	if in.IsNull() {
 		if isTopLevel {
@@ -461,19 +388,23 @@ func easyjsonB499ec80DecodePixelStoreService4(in *jlexer.Lexer, out *UniFarmProd
 			continue
 		}
 		switch key {
+		case "СкладНаименование":
+			out.WarehouseName = string(in.String())
 		case "ТоварНаименование":
 			out.ProductName = string(in.String())
 		case "ПроизводительНаименование":
 			out.ManufacturerName = string(in.String())
-		case "ПоставщикИНН":
+		case "ПоставщикНаименование":
 			out.SupplierName = string(in.String())
+		case "ПоставщикИНН":
+			out.SupplierINN = string(in.String())
 		case "Партия":
 			out.PartNumber = string(in.String())
 		case "Серия":
 			out.Serial = string(in.String())
 		case "ДатаЧека":
 			out.Date = string(in.String())
-		case "Stock":
+		case "Количество":
 			out.Stock = string(in.String())
 		default:
 			in.SkipRecursive()
@@ -485,13 +416,18 @@ func easyjsonB499ec80DecodePixelStoreService4(in *jlexer.Lexer, out *UniFarmProd
 		in.Consumed()
 	}
 }
-func easyjsonB499ec80EncodePixelStoreService4(out *jwriter.Writer, in UniFarmProduct) {
+func easyjsonB499ec80EncodePixelStoreService3(out *jwriter.Writer, in UniFarmProduct) {
 	out.RawByte('{')
 	first := true
 	_ = first
 	{
-		const prefix string = ",\"ТоварНаименование\":"
+		const prefix string = ",\"СкладНаименование\":"
 		out.RawString(prefix[1:])
+		out.String(string(in.WarehouseName))
+	}
+	{
+		const prefix string = ",\"ТоварНаименование\":"
+		out.RawString(prefix)
 		out.String(string(in.ProductName))
 	}
 	{
@@ -500,9 +436,14 @@ func easyjsonB499ec80EncodePixelStoreService4(out *jwriter.Writer, in UniFarmPro
 		out.String(string(in.ManufacturerName))
 	}
 	{
-		const prefix string = ",\"ПоставщикИНН\":"
+		const prefix string = ",\"ПоставщикНаименование\":"
 		out.RawString(prefix)
 		out.String(string(in.SupplierName))
+	}
+	{
+		const prefix string = ",\"ПоставщикИНН\":"
+		out.RawString(prefix)
+		out.String(string(in.SupplierINN))
 	}
 	{
 		const prefix string = ",\"Партия\":"
@@ -520,7 +461,7 @@ func easyjsonB499ec80EncodePixelStoreService4(out *jwriter.Writer, in UniFarmPro
 		out.String(string(in.Date))
 	}
 	{
-		const prefix string = ",\"Stock\":"
+		const prefix string = ",\"Количество\":"
 		out.RawString(prefix)
 		out.String(string(in.Stock))
 	}
@@ -530,24 +471,97 @@ func easyjsonB499ec80EncodePixelStoreService4(out *jwriter.Writer, in UniFarmPro
 // MarshalJSON supports json.Marshaler interface
 func (v UniFarmProduct) MarshalJSON() ([]byte, error) {
 	w := jwriter.Writer{}
-	easyjsonB499ec80EncodePixelStoreService4(&w, v)
+	easyjsonB499ec80EncodePixelStoreService3(&w, v)
 	return w.Buffer.BuildBytes(), w.Error
 }
 
 // MarshalEasyJSON supports easyjson.Marshaler interface
 func (v UniFarmProduct) MarshalEasyJSON(w *jwriter.Writer) {
-	easyjsonB499ec80EncodePixelStoreService4(w, v)
+	easyjsonB499ec80EncodePixelStoreService3(w, v)
 }
 
 // UnmarshalJSON supports json.Unmarshaler interface
 func (v *UniFarmProduct) UnmarshalJSON(data []byte) error {
+	r := jlexer.Lexer{Data: data}
+	easyjsonB499ec80DecodePixelStoreService3(&r, v)
+	return r.Error()
+}
+
+// UnmarshalEasyJSON supports easyjson.Unmarshaler interface
+func (v *UniFarmProduct) UnmarshalEasyJSON(l *jlexer.Lexer) {
+	easyjsonB499ec80DecodePixelStoreService3(l, v)
+}
+func easyjsonB499ec80DecodePixelStoreService4(in *jlexer.Lexer, out *UniFarm) {
+	isTopLevel := in.IsStart()
+	if in.IsNull() {
+		if isTopLevel {
+			in.Consumed()
+		}
+		in.Skip()
+		return
+	}
+	in.Delim('{')
+	for !in.IsDelim('}') {
+		key := in.UnsafeFieldName(false)
+		in.WantColon()
+		if in.IsNull() {
+			in.Skip()
+			in.WantComma()
+			continue
+		}
+		switch key {
+		case "Username":
+			out.Username = string(in.String())
+		case "Password":
+			out.Password = string(in.String())
+		default:
+			in.SkipRecursive()
+		}
+		in.WantComma()
+	}
+	in.Delim('}')
+	if isTopLevel {
+		in.Consumed()
+	}
+}
+func easyjsonB499ec80EncodePixelStoreService4(out *jwriter.Writer, in UniFarm) {
+	out.RawByte('{')
+	first := true
+	_ = first
+	{
+		const prefix string = ",\"Username\":"
+		out.RawString(prefix[1:])
+		out.String(string(in.Username))
+	}
+	{
+		const prefix string = ",\"Password\":"
+		out.RawString(prefix)
+		out.String(string(in.Password))
+	}
+	out.RawByte('}')
+}
+
+// MarshalJSON supports json.Marshaler interface
+func (v UniFarm) MarshalJSON() ([]byte, error) {
+	w := jwriter.Writer{}
+	easyjsonB499ec80EncodePixelStoreService4(&w, v)
+	return w.Buffer.BuildBytes(), w.Error
+}
+
+// MarshalEasyJSON supports easyjson.Marshaler interface
+func (v UniFarm) MarshalEasyJSON(w *jwriter.Writer) {
+	easyjsonB499ec80EncodePixelStoreService4(w, v)
+}
+
+// UnmarshalJSON supports json.Unmarshaler interface
+func (v *UniFarm) UnmarshalJSON(data []byte) error {
 	r := jlexer.Lexer{Data: data}
 	easyjsonB499ec80DecodePixelStoreService4(&r, v)
 	return r.Error()
 }
 
 // UnmarshalEasyJSON supports easyjson.Unmarshaler interface
-func (v *UniFarmProduct) UnmarshalEasyJSON(l *jlexer.Lexer) {
+func (v *UniFarm) UnmarshalEasyJSON(l *jlexer.Lexer) {
 	easyjsonB499ec80DecodePixelStoreService4(l, v)
 }
 func easyjsonB499ec80DecodePixelStoreService5(in *jlexer.Lexer, out *ResponseForQueryReceipt) {

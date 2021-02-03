@@ -5,6 +5,7 @@ import (
 	"github.com/patrickmn/go-cache"
 	"pixel/core/model"
 	"pixel/helper"
+	"pixel/sentry"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +17,7 @@ type PlatformOfd struct {
 	Type     string
 	Login    string
 	Password string
+	Sentry   *sentry.Sentry
 }
 
 // CheckReceipt проверка чека
@@ -34,7 +36,10 @@ func (ofd *PlatformOfd) CheckReceipt(productName, fd string, datePay time.Time, 
 // GetReceipts получить чек
 func (ofd *PlatformOfd) GetReceipts(date time.Time) {
 	pOfd := platformOfd.PlatformOfd(ofd.Login, ofd.Password)
-	receipts, _ := pOfd.GetReceipts(date)
+	receipts, err := pOfd.GetReceipts(date)
+	if err != nil {
+		ofd.Sentry.Error(err)
+	}
 
 	rCache := make(map[string][]model.Document)
 	for _, receipt := range receipts {

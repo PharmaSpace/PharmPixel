@@ -1,8 +1,3 @@
-// Copyright 2015 Daniel Theophanes.
-// Use of this source code is governed by a zlib-style
-// license that can be found in the LICENSE file.
-
-// Simple service that only works by printing a log message every few seconds.
 package main
 
 import (
@@ -12,6 +7,7 @@ import (
 	"os/signal"
 	"pixel/config"
 	"pixel/core"
+	"pixel/sentry"
 	"pixel/store/service"
 	"runtime"
 	"syscall"
@@ -22,7 +18,7 @@ import (
 	windowsService "github.com/kardianos/service"
 )
 
-var revision = "3.0.35"
+var revision = "3.0.40"
 
 var logger windowsService.Logger
 
@@ -64,15 +60,10 @@ func (p *program) run() {
 		ticker = time.NewTicker(config.Cfg.WatchingTime * time.Minute)
 	}
 
-	date := config.Cfg.UniFarmOptions.Date
-	if err != nil {
-		log.Print(err)
-	}
 	for {
 		select {
 		case <-ticker.C:
 			lock := fslock.New(config.Cfg.Files.WorkingFolder + "/../pixel.lock")
-
 			err = lock.Lock()
 			if err != nil {
 				log.Print(err)
@@ -88,19 +79,24 @@ func (p *program) run() {
 				Username: config.Cfg.MarketplaceOptions.Username,
 				Password: config.Cfg.MarketplaceOptions.Password,
 			}
-
+			merchant, err := marketplace.WhoAmi()
+			if err != nil {
+				log.Print(err)
+			}
+			s := sentry.NewSentry(merchant.MerchantID, merchant.PointID, revision)
 			c := core.Core{
 				Log:         logger,
 				Version:     revision,
 				SourceDir:   config.Cfg.Files.SourceFolder,
 				Marketplace: marketplace,
 				Config:      config.Cfg,
+				Sentry:      s,
 			}
 
 			c.Exec()
 			err = os.Remove(config.Cfg.Files.WorkingFolder + "/../pixel.lock")
 			if err != nil {
-				log.Printf("[ERROR] remove lock %v", err)
+				s.Error(err)
 			}
 		case <-p.exit:
 			ticker.Stop()
@@ -125,6 +121,7 @@ func (p *program) Stop(s windowsService.Service) error {
 func main() {
 	svcFlag := flag.String("service", "", "Control the system service.")
 	flag.Parse()
+
 	options := make(windowsService.KeyValue)
 	options["Restart"] = "on-success"
 	options["SuccessExitStatus"] = "1 2 8 SIGKILL"
@@ -207,5 +204,6 @@ func init() {
 			log.Printf("[INFO] SIGQUIT detected, dump:\n%s", getDump())
 		}
 	}()
+
 	signal.Notify(sigChan, syscall.SIGQUIT)
 }

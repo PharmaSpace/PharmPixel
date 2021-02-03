@@ -6,6 +6,7 @@ import (
 	"log"
 	"pixel/core/model"
 	"pixel/helper"
+	"pixel/sentry"
 	"strconv"
 	"strings"
 	"time"
@@ -18,6 +19,7 @@ type Sbis struct {
 	Inn      string
 	Login    string
 	Password string
+	Sentry   *sentry.Sentry
 }
 
 // CheckReceipt проверка чека
@@ -48,11 +50,14 @@ func (ofd *Sbis) GetReceipts(date time.Time) {
 	startDate := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, time.Local)
 	endDate := time.Date(date.Year(), date.Month(), date.Day(), 23, 59, 59, 59, time.Local)
 
-	receipts, _ := sbis.GetReceipts(ofd.Inn, startDate.Format("2006-01-02T15:04:05"), endDate.Format("2006-01-02T15:04:05"), sbis.SetAuthConfig(&sbis.AuthConfig{
+	receipts, err := sbis.GetReceipts(ofd.Inn, startDate.Format("2006-01-02T15:04:05"), endDate.Format("2006-01-02T15:04:05"), sbis.SetAuthConfig(&sbis.AuthConfig{
 		AppClientID: "1025293145607151",
 		Login:       ofd.Login,
 		Password:    ofd.Password,
 	}))
+	if err != nil {
+		ofd.Sentry.Error(err)
+	}
 
 	rCache := make(map[string][]model.Document)
 	for _, v := range receipts {

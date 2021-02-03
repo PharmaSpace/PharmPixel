@@ -187,16 +187,24 @@ func checkProduct(f Interface, erpProduct service.Product) bool {
 	return needCheck
 }
 
-func getMatchProducts(f Interface) {
-	getMatchFromSystem(f, true, false)
-	getMatchFromSystem(f, false, true)
+func getMatchProducts(f Interface) error {
+	err := getMatchFromSystem(f, true, false)
+	if err != nil {
+		return err
+	}
+	err = getMatchFromSystem(f, false, true)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func getMatchFromSystem(f Interface, isOfd, isErp bool) {
+func getMatchFromSystem(f Interface, isOfd, isErp bool) error {
 	filterDate := f.GetDate().Format("02.01.2006")
 	matchProducts, err := f.GetMP().GetMatchProducts(filterDate, isOfd, isErp)
 	if err != nil {
 		log.Printf("[ERROR] Ошибка получения продуктов %v", err)
+		return err
 	}
 	if len(matchProducts.Data) > 0 {
 		cacheItemsByName := make(map[string][]service.MatchProductItem)
@@ -212,4 +220,5 @@ func getMatchFromSystem(f Interface, isOfd, isErp bool) {
 			}
 		}
 	}
+	return nil
 }

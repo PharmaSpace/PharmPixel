@@ -61,15 +61,44 @@ type UniFarmReceipt struct {
 	ExpireDate           string `json:"СрокГодности"`              //  - срок годности проданного товара
 }
 
+/**
+{
+"ТоварКод": "2",
+"ТоварНаименование": "МУСТЕЛА БЭБИ ГЕЛЬ ДЛЯ МЫТЬЯ С ПОМПОЙ 500МЛ",
+"Партия": "000000003412902",
+"ЦенаЗакуп": "874.32",
+"ЦенаРозн": "1224",
+"Серия": "L545",
+"НомерДокументаПоступления": "124455415-001",
+"ПроизводительКод": "13283",
+"ПроизводительНаименование": "Laboratoires Expanscience JSC",
+"ПроизводительСтрана": "",
+"ПоставщикКод": "3",
+"ПоставщикНаименование": "ПРОТЕК ЗАО",
+"ПоставщикИНН": "7724053916",
+"СтавкаНДСЗакуп": "НДС20",
+"СтавкаНДСРозн": "НДС20",
+"СкладКод": "46",
+"СкладНаименование": "UM045, п. Внуковское, ул. Летчика Ульянина д. 7",
+"Количество": "1",
+"СуммаЗакуп": "874.32",
+"СуммаРозн": "1224",
+"Штрихкод": "3504105028398",
+"СрокГодности": "2022-02-01T00:00:00",
+"ПризнакПартии": ""
+},
+*/
 // UniFarmProduct структура
 type UniFarmProduct struct {
+	WarehouseName    string `json:"СкладНаименование"` // Наименование и адрес аптеки
 	ProductName      string `json:"ТоварНаименование"`
 	ManufacturerName string `json:"ПроизводительНаименование"`
-	SupplierName     string `json:"ПоставщикИНН"`
+	SupplierName     string `json:"ПоставщикНаименование"`
+	SupplierINN      string `json:"ПоставщикИНН"`
 	PartNumber       string `json:"Партия"`
 	Serial           string `json:"Серия"`
 	Date             string `json:"ДатаЧека"`
-	Stock            string
+	Stock            string `json:"Количество"`
 }
 
 // NewUniFarm интеграция с юнифармой
@@ -85,7 +114,7 @@ func (uf *UniFarm) GetProduct(date time.Time) (products []UniFarmProduct) {
 		err  error
 	)
 	client := &http.Client{}
-	req, err = http.NewRequest("GET", fmt.Sprintf("http://1c.unifarma.ru:180/unifarma_aptechka/hs/exchange?type=ПолучитьПродажиПартнеров&ДатаНачала=%s&ДатаОкончания=%s", date.Format("02.01.2006"), date.Format("02.01.2006")), nil)
+	req, err = http.NewRequest("GET", fmt.Sprintf("http://1c.unifarma.ru:180/unifarma_aptechka/hs/exchange?type=ПолучитьОстаткиПартнеров&ДатаОкончания=%s", date.Format("02.01.2006")), nil)
 	if err != nil {
 		log.Printf("[ERROR] Не можем получить данные с http://1c.unifarma.ru:180")
 	}

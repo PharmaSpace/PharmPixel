@@ -22,6 +22,7 @@ type Config struct {
 	OfdOptions         []OfdOptions
 	UniFarmOptions     UniFarmOptions
 	UnicoOptions       UnicoOptions
+	PixelOptions       PixelOptions
 }
 
 // Files Рабочие папки
@@ -59,6 +60,10 @@ type UnicoOptions struct {
 	ConnString string
 }
 
+type PixelOptions struct {
+	CSVType string
+}
+
 // Load загружаем данные
 func Load() {
 	fileStore := Files{
@@ -83,6 +88,10 @@ func Load() {
 	unico := UnicoOptions{
 		SQLDriver:  os.Getenv("SQL_DRIVER"),
 		ConnString: os.Getenv("UC_CONNSTRING"),
+	}
+
+	pixel := PixelOptions{
+		CSVType: os.Getenv("PIXEL_CSV_TYPE"),
 	}
 
 	var ofdOptions []OfdOptions
@@ -123,6 +132,7 @@ func Load() {
 		OfdOptions:         ofdOptions,
 		UniFarmOptions:     uniFarm,
 		UnicoOptions:       unico,
+		PixelOptions:       pixel,
 	}
 
 	debug := os.Getenv("DEBUG")

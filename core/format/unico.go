@@ -3,6 +3,7 @@ package format
 import (
 	"database/sql"
 	"fmt"
+	"pixel/sentry"
 
 	// Register some standard stuff
 	_ "github.com/denisenkom/go-mssqldb"
@@ -21,6 +22,7 @@ import (
 
 // Unico структура для интерации unico
 type Unico struct {
+	sentry           *sentry.Sentry
 	date             time.Time
 	Config           *config.Config
 	MP               service.MarketPlaceInterface
@@ -33,11 +35,11 @@ type Unico struct {
 }
 
 // NewUnico формат подключение аптеки
-func NewUnico(c *config.Config, mp service.MarketPlaceInterface, d db.DB, rCache *cache.Cache, l serviceLib.Logger, date time.Time) *Unico {
+func NewUnico(c *config.Config, mp service.MarketPlaceInterface, d db.DB, rCache *cache.Cache, l serviceLib.Logger, date time.Time, sentry *sentry.Sentry) *Unico {
 	matchingOfdCache := cache.New(5*time.Minute, 10*time.Minute)
 	matchingErpCache := cache.New(5*time.Minute, 10*time.Minute)
 
-	return &Unico{Config: c, cache: rCache, MP: mp, DB: d, Log: l, date: date, matchingOfdCache: matchingOfdCache, matchingErpCache: matchingErpCache}
+	return &Unico{Config: c, cache: rCache, MP: mp, DB: d, Log: l, date: date, matchingOfdCache: matchingOfdCache, matchingErpCache: matchingErpCache, sentry: sentry}
 }
 
 // GetCache получение кеша по ключу
@@ -95,8 +97,10 @@ func (u *Unico) Parse() {
 	u.matchingErpCache.Flush()
 	u.matchingOfdCache.Flush()
 	var err error
-	getMatchProducts(u)
-
+	err = getMatchProducts(u)
+	if err != nil {
+		u.sentry.Error(err)
+	}
 	// данные из кеша по чекам из ОФД
 	ofdRecieptCacheItems := u.cache.Items()
 	// чеки из ЕРП
@@ -105,6 +109,7 @@ func (u *Unico) Parse() {
 	if len(receipts) > 0 {
 		err = u.MP.SendReceipt(receipts)
 		if err != nil {
+			u.sentry.Error(err)
 			log.Printf("[ERROR] отпрвка чеков %v", err)
 		}
 	}
@@ -114,6 +119,7 @@ func (u *Unico) Parse() {
 		productsForMatching := OfdProductsForMatching(checkOfdProductNames)
 		err = u.MP.SendOfdProducts(productsForMatching, true, false)
 		if err != nil {
+			u.sentry.Error(err)
 			log.Printf("[ERROR] отпрвка продуктов  %v", err)
 		}
 	}
@@ -121,6 +127,7 @@ func (u *Unico) Parse() {
 	productsForMatching := ErpProductsForMatching(u, u.getErpProducts())
 	err = u.MP.SendOfdProducts(productsForMatching, false, true)
 	if err != nil {
+		u.sentry.Error(err)
 		log.Printf("[ERROR] отпрвка продуктов %v", err)
 	}
 }
@@ -135,6 +142,7 @@ func (u *Unico) OfdProductsForMatching(ofdProductNames []string) {
 	}
 	err := u.MP.SendOfdProducts(products, true, false)
 	if err != nil {
+		u.sentry.Error(err)
 		log.Printf("[ERROR] отправка продуктов %v", err)
 	}
 }
@@ -153,6 +161,7 @@ func (u *Unico) getErpProducts() []service.Product {
 	AND PD.DebKred = 2  AND PD.IsCassa > 0 GROUP BY PD.Podr, DIV.ShortName, T.Name, C.ShortName, C.INN, F.NameFactory, CT.Name, L.Serial, L.Quantity, T.ScanCod 
 	ORDER BY T.Name ASC`, u.date.Format("02.01.2006"), u.date.Format("02.01.2006")))
 	if err != nil {
+		u.sentry.Error(err)
 		err = u.Log.Errorf("Ошибка запроса в получении товаров %v", err)
 		if err != nil {
 			log.Printf("Ошибка запроса в получении товаров %v", err)
@@ -167,8 +176,9 @@ func (u *Unico) getErpProducts() []service.Product {
 	products := make([]service.Product, 0)
 	for rows.Next() {
 		product := service.Product{}
-		err := rows.Scan(&product.Name, &product.Manufacturer, &product.Stock, &product.PartNumber, &product.Serial, &product.WarehouseName, &product.SupplerName, &product.SupplerInn)
+		err = rows.Scan(&product.Name, &product.Manufacturer, &product.Stock, &product.PartNumber, &product.Serial, &product.WarehouseName, &product.SupplerName, &product.SupplerInn)
 		if err != nil {
+			u.sentry.Error(err)
 			err = u.Log.Errorf("Ошибка в переменной product %v", err)
 			if err != nil {
 				log.Printf("Ошибка в переменной product %v", err)
@@ -205,6 +215,7 @@ func (u *Unico) getReceipts() (receipts []*model.Receipt) {
 	GROUP BY PD.Podr, DIV.ShortName, DC.Date, DCI.FPDKKM, DC.CodCotter, F.NameFactory, C.ShortName, C.INN, DC.NameTMC, L.PriceSaleNaked, L.PriceSale, L.SumNDSSale, L.SumSale, L.Quantity, L.Serial 
 	ORDER BY DC.NameTMC ASC`, u.date.Format("02.01.2006"), u.date.Format("02.01.2006")))
 	if err != nil {
+		u.sentry.Error(err)
 		err = u.Log.Errorf("Ошибка запроса в получении заказов %v", err)
 		if err != nil {
 			log.Printf("Ошибка запроса в получении заказов %v", err)
@@ -220,8 +231,9 @@ func (u *Unico) getReceipts() (receipts []*model.Receipt) {
 	for rows.Next() {
 		order := new(model.Receipt)
 		date := ""
-		err := rows.Scan(&order.PharmacyID, &order.PharmacyAddress, &date, &order.KKM, &order.InvoiceNumber, &order.Manufacturer, &order.Supplier, &order.SupplierINN, &order.Name, &order.PriceWoVat, &order.PriceWVat, &order.Vat, &order.TotalPrice, &order.TotalNumber, &order.ShipmentNumber, &order.Series)
+		err = rows.Scan(&order.PharmacyID, &order.PharmacyAddress, &date, &order.KKM, &order.InvoiceNumber, &order.Manufacturer, &order.Supplier, &order.SupplierINN, &order.Name, &order.PriceWoVat, &order.PriceWVat, &order.Vat, &order.TotalPrice, &order.TotalNumber, &order.ShipmentNumber, &order.Series)
 		if err != nil {
+			u.sentry.Error(err)
 			err = u.Log.Errorf("Ошибка в переменной order %v", err)
 			if err != nil {
 				log.Printf("Ошибка в переменной order %v", err)
